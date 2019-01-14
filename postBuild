@@ -1,0 +1,9 @@
+#!/bin/bash
+
+# Install CAMB
+git clone https://github.com/cmbant/CAMB.git /tmp/camb
+cd /tmp/camb/pycamb
+python setup.py install
+
+# Install MINUIT sampler for cobaya
+pip install git+https://github.com/xgarrido/cobaya-minuit-sampler.git

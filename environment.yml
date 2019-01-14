@@ -1,0 +1,8 @@
+name: cobaya-minuit-tutorial
+channels:
+  - conda-forge
+dependencies:
+  - matplotlib
+  - pip:
+      - cobaya
+      - iminuit
