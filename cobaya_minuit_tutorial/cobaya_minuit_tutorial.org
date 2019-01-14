@@ -10,7 +10,7 @@ use of it and its options. In a first part, we will see how to install everythin
 (assuming =python= is correctly installed) and then we will see how to use the MINUIT minimizer to get
 the best cosmological values given a CMB power spectrum.
 
-You can interactively run this notebook /via/ [[https://mybinder.org/v2/gh/xgarrido/org-notes/master?filepath=work%2Fcobaya_minuit_tutorial%2Fcobaya_minuit_tutorial.ipynb][https://mybinder.org/badge_logo.svg]].
+You can interactively run this notebook /via/ [[https://mybinder.org/v2/gl/xgarrido1%2Fcmb_notebooks/master?filepath=cobaya_minuit_tutorial%2Fcobaya_minuit_tutorial.ipynb][https://mybinder.org/badge_logo.svg]].
 
 *If you plan to try =cobaya= @ Lyon, you can get a working =python= environment by doing*
 #+BEGIN_SRC
