@@ -177,9 +177,9 @@ Finally, let's plot things between $(\ell_\text{min}, \ell_\text{max})$
 
 #+RESULTS:
 :results:
-# Out[246]:
+# Out[294]:
 : Text(0, 0.5, '$D_\\ell$')
-[[file:./obipy-resources/bIlro8.png]]
+[[file:./obipy-resources/NFB5fJ.png]]
 :end:
 
 As we wil see later the =info= dictionary can be all declared within a =yaml= file to ease the =cobaya='s
@@ -235,9 +235,9 @@ Let's plot everything together
 
 #+RESULTS:
 :results:
-# Out[249]:
+# Out[297]:
 : Text(0.5, 0, '$\\ell$')
-[[file:./obipy-resources/1TDb0k.png]]
+[[file:./obipy-resources/rKaoEz.png]]
 :end:
 
 ** Setting-up the minimization program
@@ -272,7 +272,7 @@ and that $A_\text{s}$ may vary given a flat prior on its value
 
 #+RESULTS:
 #+begin_example
-# Out[252]:
+# Out[300]:
 ,#+BEGIN_EXAMPLE
   {'params': {'ombh2': 0.022,
   'omch2': 0.12,
@@ -302,9 +302,9 @@ $A_\text{s}$ values
 
 #+RESULTS:
 :results:
-# Out[253]:
+# Out[301]:
 : Text(0, 0.5, '$\\chi^2$')
-[[file:./obipy-resources/ll5xno.png]]
+[[file:./obipy-resources/luFcDd.png]]
 :end:
 
 ** Running MINUIT
@@ -324,6 +324,18 @@ the =cobaya= formated results
   products["maximum"]
 #+END_SRC
 
+#+RESULTS:
+:results:
+# Out[304]:
+#+BEGIN_EXAMPLE
+  weight  minuslogpost            As  minuslogprior  minuslogprior__0  \
+  0     1.0     15.487018  2.196241e-09     -19.624654        -19.624654
+
+  chi2  chi2__chi2
+  0  70.223344   70.223344
+#+END_EXAMPLE
+:end:
+
 as well as the [[https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.OptimizeResult.html][=scipy.optimize.OptimizeResult=]]
 #+BEGIN_SRC ipython :session venv :results raw drawer
   products["OptimizeResult"]
@@ -331,16 +343,16 @@ as well as the [[https://docs.scipy.org/doc/scipy/reference/generated/scipy.opti
 
 #+RESULTS:
 :results:
-# Out[258]:
+# Out[305]:
 #+BEGIN_EXAMPLE
-  fun: 30.39736787747739
-  hess_inv: array([[3.0972107e-23]])
+  fun: 35.11167192348271
+  hess_inv: array([[3.09762093e-23]])
   message: 'Optimization terminated successfully.'
-  minuit: <iminuit._libiminuit.Minuit object at 0x563b322a8fc8>
-  nfev: 25
+  minuit: <iminuit._libiminuit.Minuit object at 0x563b2d51b138>
+  nfev: 20
   njev: 0
   success: True
-  x: array([2.20091268e-09])
+  x: array([2.19624098e-09])
 #+END_EXAMPLE
 :end:
 
@@ -363,9 +375,9 @@ We can plot the best $A_\text{s}$ value found by MINUIT
 
 #+RESULTS:
 :results:
-# Out[259]:
-: <matplotlib.legend.Legend at 0x7fa4f3dc0b70>
-[[file:./obipy-resources/j6q4bw.png]]
+# Out[306]:
+: <matplotlib.legend.Legend at 0x7fa4f3ba0f28>
+[[file:./obipy-resources/970bke.png]]
 :end:
 
 Next steps will be to relax other cosmological parameters...
