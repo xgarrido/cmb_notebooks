@@ -81,9 +81,6 @@ be installed by =pip=
 binary is used (and not the system wide one)
 
 ** First try with cobaya
-:PROPERTIES:
-:CUSTOM_ID: first_try
-:END:
 *** Emacs config                                                 :noexport:
 
 #+BEGIN_SRC elisp :session venv :results none
