@@ -145,7 +145,8 @@ the next =git= clone command*) and then install it (you will need a recent versi
 /i.e./ greater than 4.8 or =ifort= compiler)
 #+BEGIN_SRC
   $ git clone --recursive https://github.com/cmbant/CAMB.git /tmp/tutorial.d/modules/camb
-  $ python setup.py install
+
+  $ pip install -e .
 #+END_SRC
 
 Now loading the =cobaya= model should work without any exception. We then have to tell =cobaya's theory=
@@ -177,9 +178,9 @@ Finally, let's plot things between $(\ell_\text{min}, \ell_\text{max})$
 
 #+RESULTS:
 :results:
-# Out[54]:
+# Out[6]:
 : Text(0, 0.5, '$D_\\ell$')
-[[file:./obipy-resources/7qJScf.png]]
+[[file:./obipy-resources/2JWK98.png]]
 :end:
 
 As we wil see later the =info= dictionary can be all declared within a =yaml= file to ease the =cobaya='s
@@ -187,30 +188,37 @@ configuration.
 
 *** Installing CLASS
 We see in the previous section how to install and use =CAMB= via =cobaya= interface. Using =CLASS= is
-pretty straightforward. We first install it
+pretty straightforward. You will eed first to install the =cython= library and then install =CLASS=
+itself
 #+BEGIN_SRC
+  $ pip install cython
+
   $ git clone https://github.com/lesgourg/class_public.git /tmp/tutorial.d/modules/class
+
   $ cd /tmp/tutorial.d/modules/class
+
   $ make
 #+END_SRC
 
 This will compile the C/C++ source code of =CLASS= and install its =python= interface named =classy=. You
 can now switch to it by doing
 #+BEGIN_SRC ipython :session venv :results none
-  info["theory"] = {"classy": None}
+  from copy import deepcopy
+  class_info = deepcopy(info)
+  class_info["theory"] = {"classy": None}
 #+END_SRC
 and we should take care to give it the right parameter names
 #+BEGIN_SRC ipython :session venv :results none
-  params = {
+  class_params = {
       "omega_b": 0.022, "omega_cdm": 0.12, "H0": 68, "tau_reio": 0.07,
       "A_s": 2.2e-9, "n_s": 0.96,
       "m_ncdm": 0.06, "N_ur": 2.0328, "N_ncdm": 1}
-  info["params"] = params
+  class_info["params"] = class_params
 #+END_SRC
 
 Now we define the new model with its requirements
 #+BEGIN_SRC ipython :session venv :results none
-  class_model = get_model(info)
+  class_model = get_model(class_info)
   class_model.likelihood.theory.needs(cl={"tt": lmax})
   class_model.logposterior({})
 #+END_SRC
@@ -235,9 +243,9 @@ and we can plot CAMB vs. CLASS
 
 #+RESULTS:
 :results:
-# Out[72]:
-: <matplotlib.legend.Legend at 0x7f504d97d7b8>
-[[file:./obipy-resources/QyvXtH.png]]
+# Out[10]:
+: <matplotlib.legend.Legend at 0x7ff5be662ac8>
+[[file:./obipy-resources/GpWtLl.png]]
 :end:
 
 
@@ -293,9 +301,9 @@ Let's plot everything together
 
 #+RESULTS:
 :results:
-# Out[297]:
+# Out[13]:
 : Text(0.5, 0, '$\\ell$')
-[[file:./obipy-resources/rKaoEz.png]]
+[[file:./obipy-resources/1nYxXt.png]]
 :end:
 
 ** Setting-up the minimization program
@@ -307,11 +315,11 @@ spectrum amplitude $A_\text{s}$. All the other parameters will be fixed to their
 First we will define our likelihood
 #+BEGIN_SRC ipython :session venv :results none
   def chi2(_theory={"cl": {"tt": lmax}}):
-          ls = np.arange(lmin, lmax)
-          Dl_theo = _theory.get_cl(ell_factor=True)["tt"][lmin:lmax]
-          lb, Db_theo, _ = bin_spectrum(Dl_theo, ls, lmin, lmax, delta_l)
-          chi2 = np.sum(((Db_obs - Db_theo)/err_Db)**2)
-          return -chi2
+      ls = np.arange(lmin, lmax)
+      Dl_theo = _theory.get_cl(ell_factor=True)["tt"][lmin:lmax]
+      lb, Db_theo, _ = bin_spectrum(Dl_theo, ls, lmin, lmax, delta_l)
+      chi2 = np.sum(((Db_obs - Db_theo)/err_Db)**2)
+      return -chi2
 #+END_SRC
 
 Our $\chi^2$ function will need to get the binned $D_\ell$ for every new set of cosmological
@@ -330,7 +338,7 @@ and that $A_\text{s}$ may vary given a flat prior on its value
 
 #+RESULTS:
 #+begin_example
-# Out[300]:
+# Out[16]:
 ,#+BEGIN_EXAMPLE
   {'params': {'ombh2': 0.022,
   'omch2': 0.12,
@@ -353,16 +361,16 @@ $A_\text{s}$ values
   As = np.linspace(1e-9, 4e-9, 10)
   chi2s = [-model.loglike({"As": A})[0] for A in As]
 
-  plt.plot(As, chi2s)
+  plt.plot(As, chi2s, "-o")
   plt.xlabel(r"$A_\mathrm{s}$")
   plt.ylabel(r"$\chi^2$")
 #+END_SRC
 
 #+RESULTS:
 :results:
-# Out[301]:
+# Out[18]:
 : Text(0, 0.5, '$\\chi^2$')
-[[file:./obipy-resources/luFcDd.png]]
+[[file:./obipy-resources/AGqx81.png]]
 :end:
 
 ** Running MINUIT
@@ -384,13 +392,13 @@ the =cobaya= formated results
 
 #+RESULTS:
 :results:
-# Out[304]:
+# Out[22]:
 #+BEGIN_EXAMPLE
   weight  minuslogpost            As  minuslogprior  minuslogprior__0  \
-  0     1.0     15.487018  2.196241e-09     -19.624654        -19.624654
+  0     1.0      0.711682  2.195257e-09     -19.624654        -19.624654
 
   chi2  chi2__chi2
-  0  70.223344   70.223344
+  0  40.672672   40.672672
 #+END_EXAMPLE
 :end:
 
@@ -401,16 +409,17 @@ as well as the [[https://docs.scipy.org/doc/scipy/reference/generated/scipy.opti
 
 #+RESULTS:
 :results:
-# Out[305]:
+# Out[23]:
 #+BEGIN_EXAMPLE
-  fun: 35.11167192348271
-  hess_inv: array([[3.09762093e-23]])
+  fun: 20.336335877028255
+  hess_inv: array([[3.10078385e-23]])
   message: 'Optimization terminated successfully.'
-  minuit: <iminuit._libiminuit.Minuit object at 0x563b2d51b138>
-  nfev: 20
+  minuit: <iminuit._libiminuit.Minuit object at 0x55a6aee8e968>
+  nfev: 17
   njev: 0
+  ntry: 1
   success: True
-  x: array([2.19624098e-09])
+  x: array([2.19525737e-09])
 #+END_EXAMPLE
 :end:
 
@@ -433,9 +442,9 @@ We can plot the best $A_\text{s}$ value found by MINUIT
 
 #+RESULTS:
 :results:
-# Out[306]:
-: <matplotlib.legend.Legend at 0x7fa4f3ba0f28>
-[[file:./obipy-resources/970bke.png]]
+# Out[24]:
+: <matplotlib.legend.Legend at 0x7ff5be320e80>
+[[file:./obipy-resources/eQdK6V.png]]
 :end:
 
 Next steps will be to relax other cosmological parameters...
