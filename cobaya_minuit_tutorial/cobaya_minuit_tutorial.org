@@ -120,7 +120,7 @@ to define our own likelihood and we will also adress how all these parameters ca
 We will now get the model given the above parameters
 #+BEGIN_SRC ipython :session venv :results none
   from cobaya.model import get_model
-  model = get_model(info)
+  camb_model = get_model(info)
 #+END_SRC
 You should now get a =ModuleNotFoundError= exception given that CAMB has not been found.
 #+BEGIN_SRC
@@ -134,26 +134,30 @@ Make sure that you have compiled it, and that you either
 #+END_SRC
 
 As the exception will tell you you can either define a =path= within the =theory= block above which
-points to =python= interface to CAMB or install =pycamb=. We will use the latter and we will first =git=
-clone CAMB and then install =pycamb= (you will need a recent version of =gfortran= /i.e./ greater than
-4.8)
+points to =python= interface to CAMB or install CAMB by hand. Actually, since version 1.0.0, CAMB
+becomes a full python package and can be installed with =pip=
 #+BEGIN_SRC
-  $ git clone https://github.com/cmbant/CAMB.git /tmp/tutorial.d/modules/camb
+  $ pip install camb
+#+END_SRC
 
-  $ cd /tmp/tutorial.d/modules/camb/pycamb
-
+If you plan to change CAMB then you have to =git= clone CAMB (*do not forget the =--recursive= option in
+the next =git= clone command*) and then install it (you will need a recent version of =gfortran=
+/i.e./ greater than 4.8 or =ifort= compiler)
+#+BEGIN_SRC
+  $ git clone --recursive https://github.com/cmbant/CAMB.git /tmp/tutorial.d/modules/camb
   $ python setup.py install
 #+END_SRC
 
 Now loading the =cobaya= model should work without any exception. We then have to tell =cobaya's theory=
 that we will need the computation of $C_\ell$ up to $\ell_\text{max} = 1000$
 #+BEGIN_SRC ipython :session venv :results none
-  model.likelihood.theory.needs(cl={"tt": 1000})
+  lmin, lmax = 2, 1000
+  camb_model.likelihood.theory.needs(cl={"tt": lmax})
 #+END_SRC
 and compute the CMB power spectrum (=ell_factor=True= means normalization by $\ell(\ell+1)/(2\pi)$)
 #+BEGIN_SRC ipython :session venv :results none
-  model.logposterior({})
-  Dls = model.likelihood.theory.get_cl(ell_factor=True)
+  camb_model.logposterior({})
+  Dls = camb_model.likelihood.theory.get_cl(ell_factor=True)
   Dl_tt = Dls["tt"]
 #+END_SRC
 The first line, the empty dictionary of posteriors, actually means the parameters are all fixed.
@@ -164,7 +168,6 @@ Finally, let's plot things between $(\ell_\text{min}, \ell_\text{max})$
   import numpy as np
   import matplotlib.pyplot as plt
 
-  lmin, lmax = 2, 1000
   l = np.arange(lmin, lmax)
   Dl = Dl_tt[lmin:lmax]
   plt.plot(l, Dl, "r")
@@ -174,13 +177,71 @@ Finally, let's plot things between $(\ell_\text{min}, \ell_\text{max})$
 
 #+RESULTS:
 :results:
-# Out[294]:
+# Out[54]:
 : Text(0, 0.5, '$D_\\ell$')
-[[file:./obipy-resources/NFB5fJ.png]]
+[[file:./obipy-resources/7qJScf.png]]
 :end:
 
 As we wil see later the =info= dictionary can be all declared within a =yaml= file to ease the =cobaya='s
 configuration.
+
+*** Installing CLASS
+We see in the previous section how to install and use =CAMB= via =cobaya= interface. Using =CLASS= is
+pretty straightforward. We first install it
+#+BEGIN_SRC
+  $ git clone https://github.com/lesgourg/class_public.git /tmp/tutorial.d/modules/class
+  $ cd /tmp/tutorial.d/modules/class
+  $ make
+#+END_SRC
+
+This will compile the C/C++ source code of =CLASS= and install its =python= interface named =classy=. You
+can now switch to it by doing
+#+BEGIN_SRC ipython :session venv :results none
+  info["theory"] = {"classy": None}
+#+END_SRC
+and we should take care to give it the right parameter names
+#+BEGIN_SRC ipython :session venv :results none
+  params = {
+      "omega_b": 0.022, "omega_cdm": 0.12, "H0": 68, "tau_reio": 0.07,
+      "A_s": 2.2e-9, "n_s": 0.96,
+      "m_ncdm": 0.06, "N_ur": 2.0328, "N_ncdm": 1}
+  info["params"] = params
+#+END_SRC
+
+Now we define the new model with its requirements
+#+BEGIN_SRC ipython :session venv :results none
+  class_model = get_model(info)
+  class_model.likelihood.theory.needs(cl={"tt": lmax})
+  class_model.logposterior({})
+#+END_SRC
+and we can plot CAMB vs. CLASS
+#+BEGIN_SRC ipython :session venv :results raw drawer
+  Dls_class = class_model.likelihood.theory.get_cl(ell_factor=True)
+  Dls_camb = camb_model.likelihood.theory.get_cl(ell_factor=True)
+  Dl_tt_class, Dl_tt_camb = Dls_class["tt"][lmin:lmax], Dls_camb["tt"][lmin:lmax]
+
+  grid = plt.GridSpec(4, 1, hspace=0, wspace=0)
+  main = plt.subplot(grid[0:3], xticklabels=[])
+  main.plot(l, Dl_tt_camb, "r", label="CAMB")
+  main.plot(l, Dl_tt_class, "k", label="CLASS")
+  main.set_ylabel(r"$D_\ell$")
+  main.legend()
+  dev = plt.subplot(grid[3])
+  dev.plot(l, Dl_tt_camb - Dl_tt_class, "k", label="CAMB - CLASS")
+  dev.set_ylabel(r"$\Delta D_\ell$")
+  dev.set_xlabel(r"$\ell$")
+  dev.legend()
+#+END_SRC
+
+#+RESULTS:
+:results:
+# Out[72]:
+: <matplotlib.legend.Legend at 0x7f504d97d7b8>
+[[file:./obipy-resources/QyvXtH.png]]
+:end:
+
+
+
 
 * Using MINUIT sampler within cobaya
 Given the previous simulated spectrum, we will now bin it and slightly disturbed it to apply the
