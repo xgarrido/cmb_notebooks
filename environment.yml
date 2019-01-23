@@ -5,4 +5,6 @@ dependencies:
   - matplotlib
   - pip:
       - cobaya
+      - cython
       - iminuit
+      - camb

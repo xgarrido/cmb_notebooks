@@ -14,7 +14,7 @@ You can interactively run this notebook /via/ [[https://mybinder.org/v2/gh/xgarr
 
 *If you plan to try =cobaya= @ Lyon, you can get a working =python= environment by doing*
 #+BEGIN_SRC
-  $ source /sps/planck/Temp/garrido.d/virtualenv.d/cobaya-tutorial/bin/activate
+  $ source /sps/planck/Temp/garrido.d/virtualenv.d/cobaya-tutorial.sh
 #+END_SRC
 *and skip all the installation steps (even the =CAMB= installation).*
 
