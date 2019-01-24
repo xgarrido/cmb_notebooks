@@ -152,7 +152,7 @@ the next =git= clone command*) and then install it (you will need a recent versi
 Now loading the =cobaya= model should work without any exception. We then have to tell =cobaya's theory=
 that we will need the computation of $C_\ell$ up to $\ell_\text{max} = 1000$
 #+BEGIN_SRC ipython :session venv :results none
-  lmin, lmax = 2, 1000
+  lmin, lmax = 2, 2000
   camb_model.likelihood.theory.needs(cl={"tt": lmax})
 #+END_SRC
 and compute the CMB power spectrum (=ell_factor=True= means normalization by $\ell(\ell+1)/(2\pi)$)
