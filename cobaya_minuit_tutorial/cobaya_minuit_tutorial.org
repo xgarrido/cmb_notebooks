@@ -82,7 +82,6 @@ binary is used (and not the system wide one)
 
 ** First try with cobaya
 *** Emacs config                                                 :noexport:
-
 #+BEGIN_SRC elisp :session venv :results none
   (pyvenv-workon "cobaya-tutorial")
 #+END_SRC
@@ -247,9 +246,6 @@ and we can plot CAMB vs. CLASS
 : <matplotlib.legend.Legend at 0x7ff5be662ac8>
 [[file:./obipy-resources/GpWtLl.png]]
 :end:
-
-
-
 
 * Using MINUIT sampler within cobaya
 Given the previous simulated spectrum, we will now bin it and slightly disturbed it to apply the
