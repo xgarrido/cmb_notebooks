@@ -113,8 +113,8 @@ have different resolutions.
   fields = ["T", "Q", "U"]
   kwargs = dict(extent=[ra1, ra0, dec0, dec1], origin="lower")
   for i, field in enumerate(fields):
-      kwargs["vmin"] = np.min([map_car.data[i], map_healpix_projected.data[i]])
-      kwargs["vmax"] = np.max([map_car.data[i], map_healpix_projected.data[i]])
+      kwargs["vmin"] = np.min([map_car.data[i], map_healpix_proj.data[i]])
+      kwargs["vmax"] = np.max([map_car.data[i], map_healpix_proj.data[i]])
       axes[0, i].imshow(map_car.data[i], **kwargs)
       axes[1, i].imshow(map_healpix_proj.data[i], **kwargs)
       axes[0, i].set_title(fields[i])
