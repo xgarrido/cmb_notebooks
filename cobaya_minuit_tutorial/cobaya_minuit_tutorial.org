@@ -151,13 +151,13 @@ the next =git= clone command*) and then install it (you will need a recent versi
 Now loading the =cobaya= model should work without any exception. We then have to tell =cobaya's theory=
 that we will need the computation of $C_\ell$ up to $\ell_\text{max} = 1000$
 #+BEGIN_SRC ipython :session venv :results none
-  lmin, lmax = 2, 2000
-  camb_model.likelihood.theory.needs(cl={"tt": lmax})
+  lmin, lmax = 2, 1000
+  camb_model.likelihood.theory.needs(Cl={"tt": lmax})
 #+END_SRC
 and compute the CMB power spectrum (=ell_factor=True= means normalization by $\ell(\ell+1)/(2\pi)$)
 #+BEGIN_SRC ipython :session venv :results none
   camb_model.logposterior({})
-  Dls = camb_model.likelihood.theory.get_cl(ell_factor=True)
+  Dls = camb_model.likelihood.theory.get_Cl(ell_factor=True)
   Dl_tt = Dls["tt"]
 #+END_SRC
 The first line, the empty dictionary of posteriors, actually means the parameters are all fixed.
@@ -177,9 +177,9 @@ Finally, let's plot things between $(\ell_\text{min}, \ell_\text{max})$
 
 #+RESULTS:
 :results:
-# Out[6]:
+# Out[7]:
 : Text(0, 0.5, '$D_\\ell$')
-[[file:./obipy-resources/2JWK98.png]]
+[[file:./obipy-resources/m1lXbi.png]]
 :end:
 
 As we wil see later the =info= dictionary can be all declared within a =yaml= file to ease the =cobaya='s
@@ -264,7 +264,7 @@ given a =delta_l= sample size
           idx = np.where((l>i*delta_l) & (l<(i+1)*delta_l))
           db[i] = np.mean(Dl[idx])
           lb[i] = np.mean(l[idx])
-          err_db[i] = np.std(Dl[idx])/np.sqrt(np.alen(idx))
+          err_db[i] = np.std(Dl[idx])/np.sqrt(np.alen(idx[0]))
       idx = np.where(lb>lmin)
       lb, db, err_db = lb[idx], db[idx], err_db[idx]
       return lb, db, err_db
@@ -297,9 +297,9 @@ Let's plot everything together
 
 #+RESULTS:
 :results:
-# Out[13]:
+# Out[12]:
 : Text(0.5, 0, '$\\ell$')
-[[file:./obipy-resources/1nYxXt.png]]
+[[file:./obipy-resources/hG6HVA.png]]
 :end:
 
 ** Setting-up the minimization program
@@ -376,8 +376,8 @@ Now that everything is set-up, we can run MINUIT. We still have to set the =samp
 #+END_SRC
 with its default settings and do the minimization
 #+BEGIN_SRC ipython :session venv :results none :async t
-    from cobaya.run import run
-    updated_info, products = run(info)
+  from cobaya.run import run
+  updated_info, products = run(info)
 #+END_SRC
 
 The results of minimization are stored within the =products= variable which is a dictionary holding

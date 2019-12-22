@@ -1,0 +1,497 @@
+#+TITLE: Using & testing MFLike likelihood
+#+PROPERTY: header-args:jupyter-python :session mflike_tutorial
+#+PROPERTY: header-args :exports both
+#+PROPERTY: header-args :tangle mflike_tutorial.py
+
+This notebook provides some examples on how to interact programmatically with the =MFLike= likelihood.
+
+* Emacs config                                                     :noexport:
+#+BEGIN_SRC elisp :session venv :results none :tangle non
+  (setenv "WORKON_HOME" (concat (getenv "HOME") "/Workdir/CMB/development/LAT_MFLike"))
+  (pyvenv-workon "pyenv")
+#+END_SRC
+
+* Preamble
+#+BEGIN_SRC jupyter-python
+  %matplotlib inline
+  import numpy as np
+  import matplotlib as mpl
+  import matplotlib.pyplot as plt
+  import cobaya
+  import camb
+  print("     Numpy :", np.__version__)
+  print("Matplotlib :", mpl.__version__)
+  print("      CAMB :", camb.__version__)
+  print("    Cobaya :", cobaya.__version__)
+  print(cobaya.__file__)
+#+END_SRC
+
+#+RESULTS:
+:      Numpy : 1.17.4
+: Matplotlib : 3.1.2
+:       CAMB : 1.1.0
+:     Cobaya : 2.1.0
+: /home/garrido/Workdir/CMB/development/LAT_MFLike/pyenv/lib/python3.8/site-packages/cobaya/__init__.py
+
+* Loading & getting the MFLike likelihood from cobaya
+
+We first set the default values of CMB and nuisance parameters
+#+BEGIN_SRC jupyter-python
+  cosmo_params = {
+      "cosmomc_theta": 0.0104085,
+      "logA": {"value": 3.044, "drop": True},
+      "As": {"value": "lambda logA: 1e-10*np.exp(logA)"},
+      "ombh2": 0.02237,
+      "omch2": 0.1200,
+      "ns": 0.9649,
+      "Alens": 1.0,
+      "tau": 0.0544
+  }
+  nuisance_params= {
+      "a_tSZ": 3.30,
+      "a_kSZ": 1.60,
+      "a_p": 6.90,
+      "beta_p": 2.08,
+      "a_c": 4.90,
+      "beta_c": 2.20,
+      "n_CIBC": 1.20,
+      "a_s": 3.10,
+      "T_d": 9.60
+  }
+#+END_SRC
+
+#+RESULTS:
+
+Then we declare our likelihood
+#+BEGIN_SRC jupyter-python
+  mflike_config = {
+      "mflike.MFLike": {"sim_id": 0, "select": "tt-te-ee"}
+  }
+#+END_SRC
+
+#+RESULTS:
+
+We will need to download and install [[https://github.com/simonsobs/LAT_MFLike_data][=LAT_MFLike_data=]]. Here we will do it programatically in such a
+way we can use this notebook without any prerequisites. Code and data will be stored in the =/tmp=
+directory for the tutorial purpose but feel free to change it to whatever location you want. By the
+way the next command will take some times to proceed
+#+BEGIN_SRC jupyter-python
+  from cobaya.install import install
+  install({"likelihood": mflike_config}, path="/tmp/modules")
+#+END_SRC
+
+#+RESULTS:
+: [install] Installing modules at '/tmp/modules'
+:
+: ================================================================================
+: likelihood:mflike.MFLike
+: ================================================================================
+:
+: [install] External module already installed.
+:
+: [install] Doing nothing.
+:
+
+We finally put everything into a dictionary to push it into =cobaya= configuration system
+#+BEGIN_SRC jupyter-python
+  info = {
+      "params": {**cosmo_params, **nuisance_params},
+      "likelihood": mflike_config,
+      "theory": {"camb": {"extra_args": {"lens_potential_accuracy": 1}}},
+      "modules": "/tmp/modules"
+  }
+#+END_SRC
+
+#+RESULTS:
+
+We will now get the model given the above parameters
+#+BEGIN_SRC jupyter-python
+  from cobaya.model import get_model
+  model = get_model(info)
+#+END_SRC
+
+#+RESULTS:
+: [prior] *WARNING* No sampled parameters requested! This will fail for non-mock samplers.
+: [camb] *local* CAMB not found at /tmp/modules/code/CAMB
+: [camb] Importing *global* CAMB.
+: [mflike.mflike] Initialising.
+
+To get a direct acces to the =MFLike= likelihood instance, we can retrieve it from the collection of
+likelihoods of =cobaya= given its name (so far there is only our likelihood)
+#+BEGIN_SRC jupyter-python
+  mflike = model.likelihood["mflike.MFLike"]
+#+END_SRC
+
+#+RESULTS:
+
+We can now play with the different data (Bbl, inverted covariance matrix) and we can also call the
+different methods such as =_get_foreground_model= to see what foreground model look likes.
+
+* Getting likelihood value given current parameter set
+
+We can retrieve informations related to likelihood(s) as follow
+#+BEGIN_SRC jupyter-python
+  loglikes, derived = model.loglikes({})
+  print("log-likelihood value = {}, derived parameter value (As) = {}".format(loglikes, derived))
+#+END_SRC
+
+#+RESULTS:
+: log-likelihood value = [-1354.1473145], derived parameter value (As) = [2.0989031673191437e-09]
+
+We can also use the =evaluate= sampler that evaluates the log-likelihood at a given reference point :
+here, since parameters are all fixed, it computes the log-likelihood value.
+#+BEGIN_SRC jupyter-python :async yes
+  info["sampler"] = {"evaluate": None}
+  from cobaya.run import run
+  updated_info, products = run(info)
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+  [prior] *WARNING* No sampled parameters requested! This will fail for non-mock samplers.
+  [camb] *local* CAMB not found at /tmp/modules/code/CAMB
+  [camb] Importing *global* CAMB.
+  [mflike.mflike] Initialising.
+  [evaluate] Initialized!
+  [evaluate] Looking for a reference point with non-zero prior.
+  [evaluate] Reference point:
+
+  [evaluate] Evaluating prior and likelihoods...
+  [evaluate] log-posterior  = -1377.86
+  [evaluate] log-prior      = 0
+  [evaluate]    logprior_0 = 0
+  [evaluate] log-likelihood = -1377.86
+  [evaluate]    chi2_mflike.MFLike = 2755.73
+  [evaluate] Derived params:
+  [evaluate]    As = 2.0989e-09
+#+end_example
+
+Finally, we can directly catch the value returned by =logp= function from =MFLike= likelihood
+#+BEGIN_SRC jupyter-python
+  logp = mflike.logp(**nuisance_params)
+  print("log-likelihood value =", logp)
+  print("Χ² value =", -2*logp)
+#+END_SRC
+
+#+RESULTS:
+: log-likelihood value = -1377.8639195272235
+: Χ² value = 2755.727839054447
+
+* Plotting CMB power spectra
+
+Here we get $C_\ell$ for different mode and a different range of [\ell_{min};\ell_{max}] than the
+default range of =MFLike=. Make sure to call the =model.logposterior= line with the =cached=False=
+option in order to recompute \(C_\ell\)s given the new \ell range.
+#+BEGIN_SRC jupyter-python
+  lmin, lmax = 2, 9000
+  Cl = {"tt": lmax, "ee": lmax, "te": lmax, "bb":lmax}
+  model.theory["camb"].needs(Cl=Cl)
+  model.logposterior({})
+  Dls = model.theory["camb"].get_Cl(ell_factor=True)
+#+END_SRC
+
+#+RESULTS:
+
+Let's plot the different spectra
+#+BEGIN_SRC jupyter-python
+  l = np.arange(lmin, lmax)
+  dls = {cl: Dls[cl][lmin:lmax] for cl in Cl.keys()}
+  fig, axes = plt.subplots(2, 1, sharex=True, figsize=(6, 8))
+  axes[0].set_yscale("log")
+  for i, cl in enumerate(Cl.keys()):
+      ax = axes[1] if cl == "te" else axes[0]
+      ax.plot(l, dls[cl], "-C{}".format(i), label=cl.upper())
+
+  for ax in axes:
+      ax.set_ylabel(r"$D_\ell$")
+      ax.legend()
+      axes[1].set_xlabel(r"$\ell$")
+      plt.tight_layout()
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/7239c97f2cce66687a394fff72e2e37b56cc3cf5.png]]
+
+* Plotting foregrounds
+
+Get all the foreground models at higher \ell
+#+BEGIN_SRC jupyter-python
+  mflike.lmax = lmax
+  fg_models = mflike._get_foreground_model(nuisance_params)
+#+END_SRC
+
+#+RESULTS:
+
+Then plot them in a triangle plot
+#+BEGIN_SRC jupyter-python
+  mode = "tt"
+  components = mflike.foregrounds["components"][mode]
+  for exp in mflike.experiments:
+    freqs = list(*exp.values())
+    nfreqs = len(freqs)
+    fig, axes = plt.subplots(nfreqs, nfreqs, sharex=True, sharey=True, figsize=(10, 10))
+    from itertools import product
+    for i, cross in enumerate(product(freqs, freqs)):
+      idx = (i%nfreqs, i//nfreqs)
+      ax = axes[idx]
+      if idx in zip(*np.triu_indices(nfreqs, k=1)):
+        fig.delaxes(ax)
+        continue
+      for compo in components:
+        ax.plot(l, fg_models[mode, compo, cross[0], cross[1]])
+      ax.plot(l, fg_models[mode, "all", cross[0], cross[1]], color="k")
+      ax.plot(l, dls[mode], color="gray")
+
+      # Read SO data and plot on top
+      fn = mflike.data_folder + "/Dl_LAT_{}xLAT_{}_{:05d}.dat".format(
+        cross[0], cross[1], mflike.sim_id)
+      ldata, ps = mflike._read_spectra(fn)
+      ax.plot(ldata, ps[mode], ".", color="gray")
+
+      ax.legend([], title="{}x{} GHz".format(*cross))
+      if mode == "tt":
+        ax.set_yscale("log")
+        ax.set_ylim(10**-1, 10**4)
+
+  for i in range(nfreqs):
+    axes[-1, i].set_xlabel("$\ell$")
+    axes[i, 0].set_ylabel("$D_\ell$")
+  fig.legend(components + ["all"], title=mode.upper(), bbox_to_anchor=(0.5,1))
+  plt.tight_layout()
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/2df45d5d530efe2088298c2a3b0b7e2a2b6c43c0.png]]
+
+We can also show the power spectra for all the simulations and compare its mean value to theory +
+foregrounds
+#+BEGIN_SRC jupyter-python
+  cross = (93, 93)
+  nsim = 100
+  tmpl = mflike.data_folder + "/Dl_LAT_{}xLAT_{}_{:05d}.dat"
+  data = [mflike._read_spectra(tmpl.format(*cross, sim_id)) for sim_id in range(nsim)]
+
+  ldata = data[0][0]
+  sims = {cl: [data[sim_id][1][cl] for sim_id in range(nsim)]
+          for cl in Cl.keys()}
+
+  fig, axes = plt.subplots(2, 2, sharex=True, figsize=(10, 8))
+  for cl, ax in zip(Cl.keys(), axes.flatten()):
+      for ps in sims[cl]:
+          ax.plot(ldata, ps, color="tab:gray")
+      ax.plot(l, dls[cl], color="tab:red", label="theory")
+      if cl != "bb":
+          ax.plot(l, fg_models[cl, "all", cross[0], cross[1]],
+                  color="tab:blue", label="all foregrounds")
+      ax.plot(ldata, np.mean(sims[cl], axis=0), "--k", label="mean sim.")
+      ax.legend(title="{} - {}x{} GHz".format(cl.upper(), *cross))
+      if cl == "tt":
+          ax.set_yscale("log")
+          ax.set_ylim(10**-1, 10**4)
+
+  for ax in axes[:, 0]:
+      ax.set_ylabel(r"$D_\ell$")
+  for ax in axes[-1]:
+      ax.set_xlabel(r"$\ell$")
+      plt.tight_layout()
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/345bf5be8c9a717525caf76414a4b488034cf158.png]]
+
+* Fisher matrix
+
+Even if we do not need priors to compute Fisher matrix, we need to fool =cobaya= in order to change
+parameter values. We need to take care of =logA= parameter since =cobaya= will sample it but theory
+module will use the derivative =As= value.
+#+BEGIN_SRC jupyter-python
+  sampled_params = {**cosmo_params, **nuisance_params}.copy()
+  sampled_params.update({k: {"prior": {"min": 0.999*v, "max": 1.001*v}}
+                         for k, v in sampled_params.items() if k not in ["logA", "As"]})
+  sampled_params["logA"] = {"prior": {"min": 0.999*cosmo_params["logA"]["value"],
+                                      "max": 1.001*cosmo_params["logA"]["value"]},
+                            "drop": True}
+#+END_SRC
+
+#+RESULTS:
+
+Then we define a new model (after having close the previous one to release memory allocation) and
+get the =MFLike= likelihood
+#+BEGIN_SRC jupyter-python
+  if model: model.close()
+
+  info = {
+      "params": sampled_params,
+      "likelihood": mflike_config,
+      "theory": {"camb": {"extra_args": {"lens_potential_accuracy": 1}}},
+      "modules": "/tmp/modules"
+  }
+  from cobaya.model import get_model
+  model = get_model(info)
+  mflike = model.likelihood["mflike.MFLike"]
+#+END_SRC
+
+#+RESULTS:
+: [camb] *local* CAMB not found at /tmp/modules/code/CAMB
+: [camb] Importing *global* CAMB.
+: [mflike.mflike] Initialising.
+
+Given the sampled parameters, we now set the defaults value of parameters in the same order as the
+=cobaya='s one
+#+BEGIN_SRC jupyter-python
+  defaults = dict(zip(model.parameterization.sampled_params(),
+                      model.prior.sample()[0]))
+  model.logposterior(defaults)
+  cl = model.theory["camb"].get_Cl()
+  print(defaults)
+#+END_SRC
+
+#+RESULTS:
+: {'cosmomc_theta': 0.010401572740215814, 'logA': 3.045075599474698, 'ombh2': 0.02235262743240111, 'omch2': 0.11995851733467022, 'ns': 0.9640307257189652, 'Alens': 1.0009273660116624, 'tau': 0.054346467260874325, 'a_tSZ': 3.300127646006262, 'a_kSZ': 1.5986025218986932, 'a_p': 6.893129048721771, 'beta_p': 2.0815281005043405, 'a_c': 4.899026648082287, 'beta_c': 2.1993590828776868, 'n_CIBC': 1.1989771857789624, 'a_s': 3.1022597975281374, 'T_d': 9.595274538549345}
+
+and we define the list of Fisher parameters
+#+BEGIN_SRC jupyter-python
+  fisher_params = list(defaults.keys())
+  for p in ["tau", "n_CIBC", "T_d"]:
+      fisher_params.remove(p)
+  print(defaults)
+#+END_SRC
+
+#+RESULTS:
+: {'cosmomc_theta': 0.010401572740215814, 'logA': 3.045075599474698, 'ombh2': 0.02235262743240111, 'omch2': 0.11995851733467022, 'ns': 0.9640307257189652, 'Alens': 1.0009273660116624, 'tau': 0.054346467260874325, 'a_tSZ': 3.300127646006262, 'a_kSZ': 1.5986025218986932, 'a_p': 6.893129048721771, 'beta_p': 2.0815281005043405, 'a_c': 4.899026648082287, 'beta_c': 2.1993590828776868, 'n_CIBC': 1.1989771857789624, 'a_s': 3.1022597975281374, 'T_d': 9.595274538549345}
+
+For each parameter, we will compute the associated power spectra by slightly modifying the central
+value of the parameter (\pm\epsilon). The power spectra is taken from =mflike._get_power_spectra=
+given the nuisance parameters and we also need to recompute (if necessary) the theoritical
+\(C_\ell\)s. The Fisher algorithm is then
+#+BEGIN_SRC jupyter-python
+  deriv = {k: None for k in fisher_params}
+  for i, p in enumerate(deriv.keys()):
+      def _get_power_spectra(epsilon):
+          point = defaults.copy()
+          point.update({p: point[p]*(1+epsilon)})
+          print(p, point[p])
+          model.logposterior(point, cached=False)  # to force computation of theory
+          cl = model.theory["camb"].get_Cl(ell_factor=True)
+          return mflike._get_power_spectra(cl, **point)
+      epsilon = 0.01
+      ps_minus = _get_power_spectra(-epsilon)
+      ps_plus = _get_power_spectra(+epsilon)
+      delta = (ps_plus - ps_minus)/(2*epsilon*defaults[p])
+      if np.all(delta == 0):
+          print("WARNING: Sampling a parameter '{}' that do not have "
+                "any effect on power spectra! You should remove it from "
+                "cobaya parameter dictionary.".format(p))
+          fisher_params.remove(p)
+          continue
+      deriv[p] = delta
+
+  nparams = len(fisher_params)
+  fisher_matrix = np.empty((nparams, nparams))
+  for i1, p1 in enumerate(fisher_params):
+      for i2, p2 in enumerate(fisher_params):
+          fisher_matrix[i1, i2] = np.dot(deriv[p1], mflike.inv_cov.dot(deriv[p2]))
+          fisher_sigmas = np.sqrt(np.diag(np.linalg.inv(fisher_matrix)))
+  for param_name, param_sigma in zip(fisher_params, fisher_sigmas):
+      print("param: {}, sigma: {}, Fisher S/N: {}".format(
+          param_name, param_sigma, defaults[param_name]/param_sigma))
+#+END_SRC
+
+#+RESULTS:
+: param: a_tSZ, sigma: 0.04476726044865376, Fisher S/N: 73.71743575400096
+: param: a_kSZ, sigma: 0.0967736347660921, Fisher S/N: 16.51898810830672
+: param: a_p, sigma: 0.07139956608075075, Fisher S/N: 96.5430103724419
+: param: beta_p, sigma: 0.013324327623823065, Fisher S/N: 156.22012301639134
+: param: a_c, sigma: 0.11738774058600532, Fisher S/N: 41.73371617535278
+: param: beta_c, sigma: 0.030096003400295595, Fisher S/N: 73.07811119054051
+: param: a_s, sigma: 0.010720264352732677, Fisher S/N: 289.38277037332085
+: <ipython-input-46-7cc7b9b1f0ec>:26: RuntimeWarning: invalid value encountered in sqrt
+:   fisher_sigmas = np.sqrt(np.diag(np.linalg.inv(fisher_matrix)))
+
+Let's show the Signal over Noise ratio graphically
+#+BEGIN_SRC ipython :session venv :results raw drawer
+  plt.figure(figsize=(7, 6))
+  SoN = [defaults[param_name]/param_sigma
+         for param_name, param_sigma in zip(fisher_params, fisher_sigmas)]
+  plt.barh(np.arange(len(SoN)), SoN)
+  plt.xscale("log")
+  plt.xlabel("S/N")
+  plt.yticks(range(len(fisher_params)), fisher_params)
+  plt.gca().spines["right"].set_color(None)
+  plt.gca().spines["top"].set_color(None)
+#+END_SRC
+
+#+RESULTS:
+:results:
+# Out[75]:
+[[file:./obipy-resources/ZGm8o1.png]]
+:end:
+
+It also works for TT, TE or EE mode even if you keep the default list of sampled parameters. It will
+only warn you about the fact that some parameters have no effect on power spectra and thus can be
+removed from the sampled parameter list.
+
+* Using the MFLike likelihood without cobaya
+
+The =MFLike= likelihood can also be used independently of =cobaya=. The principle is the same as in
+this =cobaya='s [[https://github.com/CobayaSampler/planck_lensing_external][example]]. First we need
+to instantiate an =MFLike= object
+#+BEGIN_SRC jupyter-python
+  from mflike import MFLike
+  my_mflike = MFLike({"path_install": r"/tmp/modules", "sim_id": 0})
+#+END_SRC
+
+#+RESULTS:
+: [mflike.mflike] Initialising.
+
+To compute the log-likelihood value, we can use the =loglike= function which takes as parameters an
+theoritical $C_\ell$ dictionary and the nuisance parameter values. The $C_\ell$ dictionary can be,
+for instance, retrieved from an independant program or an independant computation. Here we will use
+=CAMB= to compute the $C_\ell$ from a cosmological model set by the =cosmo_params=
+
+#+BEGIN_SRC jupyter-python
+  camb_cosmo = {k: v for k, v in cosmo_params.items()
+                if k not in ["logA", "As"]}
+  camb_cosmo.update({"As": 1e-10*np.exp(cosmo_params["logA"]["value"]),
+                     "lmax": lmax, "lens_potential_accuracy": 1})
+
+  pars = camb.set_params(**camb_cosmo)
+  results = camb.get_results(pars)
+  powers = results.get_cmb_power_spectra(pars, CMB_unit="muK")
+  cl_dict = {k: powers["total"][:, v]
+             for k, v in {"tt": 0, "ee": 1, "te": 3, "bb": 2}.items()}
+#+END_SRC
+
+#+RESULTS:
+
+Let's plot $C_\ell$
+#+BEGIN_SRC jupyter-python
+  l = np.arange(cl_dict["tt"].shape[0])
+  fig, axes = plt.subplots(2, 1, sharex=True, figsize=(6, 8))
+  axes[0].set_yscale("log")
+  for i, (k, v) in enumerate(cl_dict.items()):
+      ax = axes[1] if k == "te" else axes[0]
+      ax.plot(l, v, "-C{}".format(i), label=k.upper())
+
+  for ax in axes:
+      ax.set_ylabel(r"$D_\ell$")
+      ax.legend()
+      axes[1].set_xlabel(r"$\ell$")
+      plt.tight_layout()
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/6ae08ab5fb917eb31cc6a8f5909a530905f0933b.png]]
+
+Now we can inject these $C_\ell$ into the =loglike= function to get the corresponding log-likelihood
+value
+#+BEGIN_SRC jupyter-python
+  my_mflike.get_requirements()
+  loglike = my_mflike.loglike(cl_dict, **nuisance_params)
+  print("log-likelihood value =", loglike)
+  print("Χ² value =", -2*(loglike)
+#+END_SRC
+
+#+RESULTS:
+: log-likelihood value = -1354.1473145039377
+: Χ² value = 2708.2946290078753

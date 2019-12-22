@@ -1,0 +1,151 @@
+#+TITLE: Example of generation of simulations and projection
+#+PROPERTY: header-args:jupyter-python :session example_projection
+#+PROPERTY: header-args :exports both
+#+PROPERTY: header-args :tangle example_projection.py
+
+* Emacs config                                                     :noexport:
+#+BEGIN_SRC elisp :session example_projection :results none :tangle no
+  (setenv "WORKON_HOME" (concat (getenv "HOME") "/Workdir/CMB/development/PSpipe"))
+  (pyvenv-workon "pyenv")
+#+END_SRC
+
+* Preamble
+#+BEGIN_SRC jupyter-python
+  %matplotlib inline
+  import os
+  import numpy as np
+  import matplotlib as mpl
+  import matplotlib.pyplot as plt
+  import pspy, pixell
+  print("     Numpy :", np.__version__)
+  print("Matplotlib :", mpl.__version__)
+  print("    pixell :", pixell.__version__)
+  # print("      pspy :", pspy.__version__)
+#+END_SRC
+
+#+RESULTS:
+:      Numpy : 1.17.4
+: Matplotlib : 3.1.2
+:     pixell : 0.6.0+34.g23be32d
+: /home/garrido/Workdir/CMB/development/PSpipe/software/pspy/__init__.py
+
+Get default data dir from =pspy= and set Planck colormap as default
+#+BEGIN_SRC jupyter-python
+  from pspy.so_config import DEFAULT_DATA_DIR
+  pixell.colorize.mpl_setdefault("planck")
+#+END_SRC
+
+#+RESULTS:
+
+* Generation of the templates
+
+The =CAR= template will go from right ascension =ra0= to =ra1= and from declination =dec0= to =dec1= (all in
+degrees). It will have a resolution of 1 arcminute and it allows 3 components (stokes parameter in
+the case of CMB anisotropies).
+
+#+BEGIN_SRC jupyter-python
+  ra0, ra1 = -5, 5
+  dec0, dec1 = -5, 5
+  res = 1
+  ncomp = 3
+  from pspy import so_map
+  template_car = so_map.car_template(ncomp, ra0, ra1, dec0, dec1, res)
+#+END_SRC
+
+#+RESULTS:
+
+We also generate an =HEALPIX= template for which we choose ~nside=256~ so that the resolution of =HEALPIX=
+is much smaller
+#+BEGIN_SRC jupyter-python
+  template_healpix = so_map.healpix_template(ncomp, nside=256, coordinate="equ")
+#+END_SRC
+
+#+RESULTS:
+
+* Read power spectrum and alm generation
+We read a =CAMB= lensed power spectrum
+#+BEGIN_SRC jupyter-python
+  from pixell import powspec
+  clfile = os.path.join(DEFAULT_DATA_DIR, "bode_almost_wmap5_lmax_1e4_lensedCls.dat")
+  ps = powspec.read_spectrum(clfile)[:ncomp,:ncomp]
+#+END_SRC
+
+#+RESULTS:
+
+and generate alms from the power spectrum up to ~lmax = 5000~
+
+#+BEGIN_SRC jupyter-python
+  from pixell import curvedsky
+  lmax = 5000
+  alms = curvedsky.rand_alm(ps, lmax=lmax)
+#+END_SRC
+
+#+RESULTS:
+
+* Computation of stokes parameters
+We compute the stokes parameters from the alms in both templates
+#+BEGIN_SRC jupyter-python
+  from pspy import sph_tools
+  map_healpix = sph_tools.alm2map(alms, template_healpix)
+  map_car = sph_tools.alm2map(alms, template_car)
+#+END_SRC
+
+#+RESULTS:
+
+and we project the =HEALPIX= map into the =CAR= template
+#+BEGIN_SRC jupyter-python
+  map_healpix_proj = so_map.healpix2car(map_healpix, map_car, lmax=lmax)
+#+END_SRC
+
+#+RESULTS:
+: WARNING: your lmax is too large, setting it to 3*nside-1 now
+: Preparing SHT
+: T -> alm
+: float64 complex128
+: P -> alm
+: Projecting
+
+* Showing maps
+We plot both the native =CAR= map and the =HEALPIX= projected to =CAR= map. They contain the same CMB but
+have different resolutions.
+#+BEGIN_SRC jupyter-python
+  fig, axes = plt.subplots(2, 3, figsize=(9, 6), sharex=True, sharey=True)
+  fields = ["T", "Q", "U"]
+  kwargs = dict(extent=[ra1, ra0, dec0, dec1], origin="lower")
+  for i, field in enumerate(fields):
+      kwargs["vmin"] = np.min([map_car.data[i], map_healpix_projected.data[i]])
+      kwargs["vmax"] = np.max([map_car.data[i], map_healpix_projected.data[i]])
+      axes[0, i].imshow(map_car.data[i], **kwargs)
+      axes[1, i].imshow(map_healpix_proj.data[i], **kwargs)
+      axes[0, i].set_title(fields[i])
+
+  axes[0, 0].set_ylabel("CAR")
+  axes[1, 0].set_ylabel("HEALPIX")
+  plt.tight_layout()
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/2c59d718615b4bd27524953d8d93fac68dbe7826.png]]
+
+We can also use the =plot= function from =pspy.so_map= and set the output path to get individual images
+for each component T, Q, U.
+#+BEGIN_SRC jupyter-python
+  output_dir = "/tmp/example_projection"
+  os.makedirs(output_dir, exist_ok=True)
+  map_car.plot(file_name=output_dir + "/map_car")
+  map_healpix_proj.plot(file_name=output_dir + "/map_healpix")
+#+END_SRC
+
+#+RESULTS:
+
+
+* Misc                                                             :noexport:
+#+BEGIN_SRC jupyter-python
+  import healpy as hp
+  plt.figure(figsize=(12,8))
+  for i, field in enumerate(["T","Q","U"]):
+      hp.mollview(map_healpix.data[i], title=field, sub=(1, ncomp, i+1))
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/bb6f8666f21212c114e8c8cc9ab961bbfb76caf3.png]]

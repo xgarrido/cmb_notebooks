@@ -1,0 +1,493 @@
+#+TITLE: LAT Multi-Frequency Likelihood analysis
+#+PROPERTY: header-args:jupyter-python :session mflike
+#+PROPERTY: header-args :exports both
+#+PROPERTY: header-args :tangle mflike_analysis.py
+
+* Preamble
+This notebook make use of [[https://getdist.readthedocs.io/en/latest/][GetDist]] python package to plot and to analyse MCMC samples.
+#+BEGIN_SRC jupyter-python
+  %matplotlib inline
+  import matplotlib.pyplot as plt
+  import numpy as np
+#+END_SRC
+
+#+RESULTS:
+
+Print versions used
+#+BEGIN_SRC jupyter-python
+  import matplotlib
+  import getdist
+  getdist.chains.print_load_details = False
+
+  print("     Numpy :", np.__version__)
+  print("Matplotlib :", matplotlib.__version__)
+  print("   GetDist :", getdist.__version__)
+#+END_SRC
+
+#+RESULTS:
+:      Numpy : 1.17.4
+: Matplotlib : 3.1.2
+:    GetDist : 1.0.3
+
+* Definitions
+Define CMB & nuisance parameter names.
+#+BEGIN_SRC jupyter-python :results none
+  cosmo_params = [
+      "cosmomc_theta",
+      "logA",
+      "ns",
+      "ombh2",
+      "omch2",
+      "H0",
+      "Alens",
+      "tau"
+  ]
+  nuisance_params = [
+      "a_tSZ",
+      "a_kSZ",
+      "a_p",
+      "beta_p",
+      "a_c",
+      "beta_c",
+      "a_s",
+      # "n_CIBC",
+      # "T_d"
+  ]
+#+END_SRC
+
+* MCMC chains
+Let's plot the chains size for all the simulations
+#+BEGIN_SRC jupyter-python
+  import glob
+  nsim = 3
+  nchains = {i: [] for i in range(nsim)}
+  for i in range(nsim):
+      chain_dir_tmpl = "./data/so_likelihood_norm/sim_{}/mcmc.?.txt"
+      files = sorted(glob.glob(chain_dir_tmpl.format(i)))
+      nchains[i] += [sum(1 for line in open(f)) for f in files]
+      nchains[i] += [sum(nchains[i])]
+
+  from tabulate import tabulate
+  print(tabulate([(k, *v) for k, v in nchains.items()],
+                 headers=["Sim."] + ["mcmc {}".format(i) for i in range(1, 5)] + ["total"],
+                 tablefmt="orgtbl"))
+#+END_SRC
+
+#+RESULTS:
+: |   Sim. |   mcmc 1 |   mcmc 2 |   mcmc 3 |   mcmc 4 |   total |
+: |--------+----------+----------+----------+----------+---------|
+: |      0 |    12341 |    12761 |    14901 |    11621 |   51624 |
+: |      1 |    14741 |    14261 |    11401 |    16621 |   57024 |
+: |      2 |    12401 |     9001 |    12341 |     9221 |   42964 |
+
+Have a look at how chains evolve with time and check convergence or not.
+#+BEGIN_SRC jupyter-python :results none
+  def plot_chains(file_root, params, nrow=None, ncol=None):
+    import glob
+    files = sorted(glob.glob(file_root + ".?.txt"))
+
+    nrow = len(params)//2 if nrow is None else nrow
+    ncol = len(params)//2 if ncol is None else ncol
+    plt.figure(figsize=(15, 10))
+    ax = [plt.subplot(nrow, ncol, i+1) for i in range(len(params))]
+
+    # Loop over files independently
+    for f in files:
+      from getdist import loadMCSamples
+      sample = loadMCSamples(f[:-4])
+      color = "C{}".format(f.split(".")[-2])
+
+      # Get param values
+      values = sample.getParams()
+
+      # Get associated LaTeX labels
+      labels = sample.paramNames.parsWithNames(params)
+      for i, p in enumerate(params):
+        ax[i].set_ylabel(labels[i].latexLabel())
+        ax[i].plot(getattr(values, p), alpha=0.75, color=color)
+    plt.tight_layout()
+#+END_SRC
+
+Plot chains for the CMB & nuisance parameters given a simulation id (up to 100)
+#+BEGIN_SRC jupyter-python
+  sim_id = 2
+  chains = "./data/so_likelihood_norm/sim_{}/mcmc".format(sim_id)
+  plot_chains(chains, params=cosmo_params+nuisance_params, ncol=4)
+#+END_SRC
+
+#+RESULTS:
+:RESULTS:
+: WARNING:root:outlier fraction 0.00016129032258064516
+: WARNING:root:outlier fraction 0.00032414910858995135
+: WARNING:root:outlier fraction 0.00010845986984815618
+[[file:./.ob-jupyter/6753aafc523c9b8d2397018fab4952277c4b144a.png]]
+:END:
+
+* MCMC distributions
+
+#+BEGIN_SRC jupyter-python :results none
+  inputs = {
+      "cosmomc_theta": 0.0104085,
+      "logA": 3.044,
+      "ombh2": 0.02237,
+      "omch2": 0.1200,
+      "ns": 0.9649,
+      "Alens": 1.0,
+      "tau": 0.0544,
+      "H0": 67.36,
+      "a_tSZ": 3.3044404448917724,
+      "a_kSZ": 1.6646620740058649,
+      "a_p": 6.912474322461401,
+      "beta_p": 2.077474196171309,
+      "a_c": 4.88617700670901,
+      "beta_c": 2.2030316332596014,
+      "n_CIBC": 1.20,
+      "a_s": 3.099214100532393,
+      "T_d": 9.60
+  }
+#+END_SRC
+
+Function to plot (mean, std) for all the simulations given input value and Fisher variances.
+#+BEGIN_SRC jupyter-python :results none
+  def plot_sim_results(params, samples, color="C0"):
+      fig, ax = plt.subplots(1, len(params), sharey=True, figsize=(20, 7))
+      plt.subplots_adjust(hspace=0, wspace=0.15)
+      plt.yticks([])
+
+      chi2s = np.empty((len(params), len(samples)))
+      values = np.zeros((len(params), len(samples)))
+      weights = np.zeros((len(params), len(samples)))
+      for i, sample in enumerate(samples):
+          marge = sample.getMargeStats()
+          for j, name in enumerate(params):
+              par = marge.parWithName(name)
+              x, xerr = par.mean, par.err
+              markers, caps, bars = ax[j].errorbar(x, i, xerr=xerr, fmt="o{}".format(color),
+                                                   ecolor=color, elinewidth=3)
+              [bar.set_alpha(0.5) for bar in bars]
+              chi2s[j, i] = ((x - inputs[name])/xerr)**2
+              values[j, i] = x
+              weights[j, i] = 1/xerr**2
+
+      # Customize axes and labels
+      for j, name in enumerate(params):
+          ax[j].spines["right"].set_color(None)
+          ax[j].spines["top"].set_color(None)
+          ax[j].tick_params(bottom="off")
+          label = samples[0].getLatex(params)[0][j]
+          ax[j].set_xlabel(r"${}$".format(label))
+          x = inputs[name]
+          mu = np.average(values[j], weights=weights[j])
+          # sigma = np.sqrt(np.average((values[j]-mu)**2, weights=weights[j]))
+          sigma = np.mean(np.sqrt(1/weights[j]))
+          ax[j].spines["left"].set_position(("data", x))
+          ax[j].axvline(mu, color=color, linestyle="--")
+          # sigma = fisher[name]
+          # mu = x
+          if sigma:
+              ax[j].axvspan((mu - sigma), (mu + sigma), color="gray", alpha=0.15)
+          from scipy.stats import chi2
+          ax[j].set_title("$P(\chi^2)$ = {0:.3f}".format(
+              chi2.sf(np.sum(chi2s[j]), len(chi2s[j]))))
+
+      return values, weights
+#+END_SRC
+
+Function to plot all the KDE distributions of parameters
+#+BEGIN_SRC jupyter-python :results none
+  def plot_sim_distribution(params, samples, values, weights, nx=None, with_point=False):
+      from getdist import plots
+      g = plots.get_subplot_plotter(subplot_size=3, subplot_size_ratio=1.2)
+      nsamples = len(samples)
+      g.settings.line_styles = nsamples*["-0.35"]
+      nx = len(params) if nx is None else nx
+      g.plots_1d(samples, params, nx=nx, share_y=True, legend_labels=[], lws=2)
+      for i, ax in enumerate(g.subplots.flatten()):
+          if not ax: continue
+          xmin, xmax, ymin, ymax = ax.axis()
+          x = np.linspace(xmin, xmax, 1000)
+          mu = np.average(values[i], weights=weights[i])
+          # sigma = np.sqrt(np.average((values[i]-mu)**2, weights=weights[i]))
+          sigma = np.mean(np.sqrt(1/weights[i]))
+          from scipy.stats import norm
+          ax.plot(x, sigma*np.sqrt(2*np.pi)*norm.pdf(x, mu, sigma), color="black", lw=3)
+          ax.axvline(inputs[params[i]], color="red", lw=3)
+          # ax.set_xlim(inputs[params[i]]-15*sigma, inputs[params[i]]+15*sigma)
+          if with_point:
+              for j in range(nsamples):
+                  ax.errorbar(values[i, j], 1/nsamples*j, xerr=np.sqrt(1/weights[i, j]), fmt="ok", ecolor="black", zorder=3)
+          legend = ax.legend([])
+          legend.set_title(r"$\frac{{{:.1f}\,\sigma}}{{\sqrt{{N_{{\rm sim}}}}}}$".format(
+              (mu-inputs[params[i]])/sigma*np.sqrt(len(values[i]))), prop={"size": 16})
+#+END_SRC
+
+Load the different samples
+#+BEGIN_SRC jupyter-python :results none
+  from getdist import loadMCSamples
+  samples = [loadMCSamples("./data/so_likelihood_new/sim_{}/mcmc".format(sim_id),
+                           settings={"ignore_rows": 0.4}) for sim_id in range(100)]
+#+END_SRC
+
+** CMB parameters
+#+BEGIN_SRC jupyter-python
+  pvalues, pweights = plot_sim_results(cosmo_params, samples)
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/36df3dc8f0bcffbd240b079c344f884fb99abec8.png]]
+
+
+#+BEGIN_SRC jupyter-python
+  plot_sim_distribution(cosmo_params, samples, pvalues, pweights, nx=4, with_point=False)
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/dd99f15e1aba68485f5bda2a14318bdaa841ea7d.png]]
+
+
+** Nuisance parameters
+#+BEGIN_SRC jupyter-python
+  nvalues, nweights = plot_sim_results(nuisance_params, samples, color="C4")
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/f3ea2c91b57663870c894dad9cb33cc7963fe82e.png]]
+
+
+#+BEGIN_SRC jupyter-python
+  plot_sim_distribution(nuisance_params, samples, nvalues, nweights, nx=4, with_point=False)
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/db8ee042d0b3b7530386fb00b21443bb892c1c1a.png]]
+* Miscellaneous
+** Write Cls to file
+:PROPERTIES:
+:HEADER-ARGS: :tangle write_input_cls.py
+:END:
+
+#+BEGIN_SRC jupyter-python
+  import cobaya
+  import camb
+  print("      CAMB :", camb.__version__)
+  print("    Cobaya :", cobaya.__version__)
+#+END_SRC
+
+Set \ell_{max} value
+#+BEGIN_SRC jupyter-python :results none
+  lmin, lmax = 2, 9000
+#+END_SRC
+
+#+BEGIN_SRC jupyter-python :results none
+  def write_input_cls(params, out_dir, lmax=lmax, plot=False):
+      import os
+      os.makedirs(out_dir, exist_ok=True)
+
+      l = np.arange(lmin, lmax)
+
+      # Get CMB Dls from cobaya/camb
+      info = {
+          "params": params,
+          "likelihood": {"mflike.MFLike": {"sim_id": 0, "lmax": lmax}},
+          "theory": {"camb": {"extra_args": {"lens_potential_accuracy": 1}}},
+          "modules": "/tmp/modules"
+      }
+      from cobaya.model import get_model
+      model = get_model(info)
+      Cl = {"tt": lmax, "ee": lmax, "te": lmax, "bb":lmax}
+      model.theory["camb"].needs(Cl=Cl)
+      model.logposterior({}, cached=False)
+      Dls = model.theory["camb"].get_Cl(ell_factor=True)
+      dls_cobaya = [Dls[s][lmin:lmax] for s in ["tt", "ee", "bb", "te"]]
+      np.savetxt("{}/cosmo_spectra.dat".format(out_dir),
+                 np.vstack([l, dls_cobaya]).T)
+      mflike = model.likelihood["mflike.MFLike"]
+      fg_models = mflike._get_foreground_model(params)
+      for k, v in fg_models.items():
+          np.savetxt("{}/{}_{}_{}x{}.dat".format(out_dir, *k),
+                     np.vstack([l, v]).T)
+#+END_SRC
+
+#+BEGIN_SRC jupyter-python
+  mean_values = np.mean(pvalues, axis=1)
+  fit_cosmo_params = {
+      "cosmomc_theta": mean_values[0],
+      "As": 1e-10*np.exp(mean_values[1]),
+      "ns": mean_values[2],
+      "ombh2": mean_values[3],
+      "omch2": mean_values[4],
+      "Alens": mean_values[6],
+      "tau": mean_values[7]
+  }
+  mean_values = np.mean(nvalues, axis=1)
+  fit_nuisance_params = {
+      "a_tSZ": mean_values[0],
+      "a_kSZ": mean_values[1],
+      "a_p": mean_values[2],
+      "beta_p": mean_values[3],
+      "a_c": mean_values[4],
+      "beta_c": mean_values[5],
+      "n_CIBC": 1.20,
+      "a_s": mean_values[6],
+      "T_d": 9.60
+  }
+  from tabulate import tabulate
+  print(tabulate({**fit_cosmo_params, **fit_nuisance_params}.items()))
+  write_input_cls(params={**fit_cosmo_params, **fit_nuisance_params},
+                  out_dir="/tmp/mflike_fit")
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+  WARNING:prior:No sampled parameters requested! This will fail for non-mock samplers.
+  -------------  -----------
+  cosmomc_theta  0.0104088
+  As             2.09808e-09
+  ns             0.964919
+  ombh2          0.022363
+  omch2          0.119838
+  Alens          1.00245
+  tau            0.054402
+  a_tSZ          3.31111
+  a_kSZ          1.72448
+  a_p            6.90229
+  beta_p         2.08009
+  a_c            4.90854
+  beta_c         2.19651
+  n_CIBC         1.2
+  a_s            3.09908
+  T_d            9.6
+  -------------  -----------
+  [prior] *WARNING* No sampled parameters requested! This will fail for non-mock samplers.
+  INFO:camb:Importing *local* CAMB from /tmp/modules/code/CAMB
+  [camb] Importing *local* CAMB from /tmp/modules/code/CAMB
+  INFO:mflike.mflike:Initialising.
+  [mflike.mflike] Initialising.
+#+end_example
+
+
+#+BEGIN_SRC jupyter-python
+  input_params = inputs.copy()
+  input_params["As"] = 1e-10*np.exp(input_params["logA"])
+  del input_params["H0"]
+  del input_params["logA"]
+  from tabulate import tabulate
+  print(tabulate(input_params.items()))
+  write_input_cls(params=input_params,
+                  out_dir="/tmp/mflike_inputs")
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+  -------------  ----------
+  cosmomc_theta  0.0104085
+  ombh2          0.02237
+  omch2          0.12
+  ns             0.9649
+  Alens          1
+  tau            0.0544
+  a_tSZ          3.30444
+  a_kSZ          1.66466
+  a_p            6.91247
+  beta_p         2.07747
+  a_c            4.88618
+  beta_c         2.20303
+  n_CIBC         1.2
+  a_s            3.09921
+  T_d            9.6
+  As             2.0989e-09
+  -------------  ----------
+  [prior] *WARNING* No sampled parameters requested! This will fail for non-mock samplers.
+  [camb] Importing *local* CAMB from /tmp/modules/code/CAMB
+  [mflike.mflike] Initialising.
+  get_requirements
+  get_requirements
+#+end_example
+
+** Check data against MCMC
+#+BEGIN_SRC jupyter-python
+  data_dir = "/tmp/modules/data"
+  cross = (145, 145)
+  spectra = ["tt", "te", "tb", "et", "bt", "ee", "eb", "be", "bb"]
+  spectrum = "tt"
+  index = spectra.index(spectrum)+1
+  sims = [np.loadtxt("{}/LAT_MFLike_data/like_products/Dl_LAT_{}xLAT_{}_{:05d}.dat".format(
+      data_dir, *cross, i)) for i in range(100)]
+  mean_sim = np.mean(sims, axis=0)
+  std_sim = np.std(sims, axis=0)/np.sqrt(100)
+
+  Bbl = np.loadtxt("{}/LAT_MFLike_data/like_products/Bbl_LAT_{}xLAT_{}_{}.dat".format(
+    data_dir, *cross, spectrum.upper()))
+  input_cmb = np.loadtxt("/tmp/mflike_inputs/cosmo_spectra.dat")[:, 1]
+  input_fg = np.loadtxt("/tmp/mflike_inputs/{}_all_{}x{}.dat".format(spectrum, *cross))[:, 1]
+  input_spec = np.dot(Bbl, input_cmb[:6000]+input_fg[:6000])
+
+  fit_cmb = np.loadtxt("/tmp/mflike_fit/cosmo_spectra.dat")[:, 1]
+  fit_fg = np.loadtxt("/tmp/mflike_fit/{}_all_{}x{}.dat".format(spectrum, *cross))[:, 1]
+  fit_spec = np.dot(Bbl, fit_cmb[:6000]+fit_fg[:6000])
+
+  import matplotlib.pyplot as plt
+  lbin = mean_sim[:, 0]
+  plt.plot(lbin, (mean_sim[:, index] - input_spec)/std_sim[:, index], "tab:blue", label="sim - input")
+  plt.plot(lbin, (mean_sim[:, index] - fit_spec)/std_sim[:, index], "tab:red", label="sim - fit")
+
+  plt.xlabel("$\ell$")
+  plt.ylabel("$\sigma$")
+  plt.title("{} - {}x{} GHz".format(spectrum.upper(), *cross))
+  plt.legend()
+#+END_SRC
+
+#+RESULTS:
+:RESULTS:
+: <matplotlib.legend.Legend at 0x7f228207c250>
+[[file:./.ob-jupyter/5c76953ec1e8f38f8f910be412af297dfd7013db.png]]
+:END:
+** Compare version of likelihood
+#+BEGIN_SRC jupyter-python
+  def show_input(g, params):
+      for i, p in enumerate(params):
+          x = inputs.get(p, np.nan)
+          kwargs = dict(color="gray", ls="--", lw=1)
+          for ax in g.subplots[:,i]:
+              if ax: ax.axvline(x, **kwargs)
+          for ax in g.subplots[i,:i]:
+              if ax: ax.axhline(x, **kwargs)
+
+  from getdist.plots import GetDistPlotSettings
+  plot_settings = GetDistPlotSettings()
+  plot_settings.num_plot_contours = 3
+  plot_settings.solid_colors = "tab10"
+  plot_settings.line_styles = "tab10"
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC jupyter-python
+  from getdist import loadMCSamples
+  sim_id = 1
+  sample1 = loadMCSamples("./data/so_likelihood_new/sim_{}/mcmc".format(sim_id),
+                          settings={"ignore_rows": 0.4})
+  sample2 = loadMCSamples("./data/so_likelihood_norm/sim_{}/mcmc".format(sim_id),
+                          settings={"ignore_rows": 0.4})
+
+  from getdist import plots
+  g = plots.get_subplot_plotter(settings=plot_settings)
+  g.triangle_plot([sample1, sample2], cosmo_params, filled=True,
+                  legend_labels=["LAT_MFLike", "LAT_MFLike + norm"],
+                  colors=["C0", "C3"], diag1d_kwargs={"colors":["C0", "C3"]})
+  # Show input value
+  show_input(g, cosmo_params)
+  # Show prior on tau
+  ax = g.subplots[-1, -1]
+  xmin, xmax, ymin, ymax = ax.axis()
+  x = np.linspace(xmin, xmax, 100)
+  from scipy.stats import norm
+  ax.plot(x, 0.018*norm.pdf(x, 0.054, 0.0073), color="gray", ls="--", label=r"$\tau$ prior")
+  ax.legend(loc="upper left", bbox_to_anchor=(1,1))
+#+END_SRC
+
+#+RESULTS:
+:RESULTS:
+: <matplotlib.legend.Legend at 0x7f45c32b2f70>
+[[file:./.ob-jupyter/f5ef3b73107ddfc4b07e931fc1de7903df018920.png]]
+:END:
