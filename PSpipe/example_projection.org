@@ -3,6 +3,13 @@
 #+PROPERTY: header-args :exports both
 #+PROPERTY: header-args :tangle example_projection.py
 
+This is an example of generation of simulations and projection. We first specify two templates, one
+in equ coordinates and =CAR= pixellisation and one in equ coordinates and =HEALPIX= pixellisation. We
+generate alms from a =CAMB= lensed power spectrum file and use them to generate a random CMB
+realisation in both template. We then project the =HEALPIX= simulation and plot both the native =CAR=
+simulation and the projected =HEALPIX= simulation. We chose a low resolution =nside= to emphasize the
+effect of resolution
+
 * Emacs config                                                     :noexport:
 #+BEGIN_SRC elisp :session example_projection :results none :tangle no
   (setenv "WORKON_HOME" (concat (getenv "HOME") "/Workdir/CMB/development/PSpipe"))
