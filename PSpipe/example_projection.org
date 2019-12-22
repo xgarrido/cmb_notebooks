@@ -3,6 +3,8 @@
 #+PROPERTY: header-args :exports both
 #+PROPERTY: header-args :tangle example_projection.py
 
+* Introduction
+
 This is an example of generation of simulations and projection. We first specify two templates, one
 in equ coordinates and =CAR= pixellisation and one in equ coordinates and =HEALPIX= pixellisation. We
 generate alms from a =CAMB= lensed power spectrum file and use them to generate a random CMB
