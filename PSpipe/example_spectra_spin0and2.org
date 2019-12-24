@@ -1,0 +1,242 @@
+#+TITLE: Example of generation of spectra for spin 0 and 2 fields
+#+PROPERTY: header-args:jupyter-python :session example_spectra_spin0and2
+#+PROPERTY: header-args :exports both
+#+PROPERTY: header-args :tangle example_spectra_spin0and2.py
+
+* Introduction
+
+This example shows the spectra generation for spin 0 and 2 fields. We will only use the =CAR=
+pixellisation to pass through the different steps of generation. If you are interested on doing the
+same thing with =HEALPIX= pixellisation, you can have a look to the file
+=example_spectra_car_healpix.ipynb=.
+
+The =CAR= survey mask is defined with =ra0, ra1, dec0, dec1= with 1 arcminute resolution. We simulate 2
+splits with 20 µK.arcmin noise and we also include a point source mask with 100 holes of size 10
+arcminutes. We appodize the survey mask with an apodisation of 1 degree and the point source mask
+with an apodisation of 0.3 degree. We finally compute the spectra between the 2 splits of data up to
+~lmax=1000~.
+
+* Emacs config                                                     :noexport:
+
+#+BEGIN_SRC elisp :session example_projection :results none :tangle no
+  (setenv "WORKON_HOME" (concat (getenv "HOME") "/Workdir/CMB/development/PSpipe"))
+  (pyvenv-workon "pyenv")
+#+END_SRC
+
+* Preamble
+Versions used for this tutorial
+#+BEGIN_SRC jupyter-python
+  %matplotlib inline
+  import os
+  import numpy as np
+  import matplotlib as mpl
+  import matplotlib.pyplot as plt
+  import pspy, pixell
+  print("     Numpy :", np.__version__)
+  print("Matplotlib :", mpl.__version__)
+  print("    pixell :", pixell.__version__)
+  # print("      pspy :", pspy.__version__)
+#+END_SRC
+
+#+RESULTS:
+:      Numpy : 1.17.4
+: Matplotlib : 3.1.2
+:     pixell : 0.6.0+34.g23be32d
+
+Get default data dir from =pspy= and set Planck colormap as default
+#+BEGIN_SRC jupyter-python :results none
+  from pspy.so_config import DEFAULT_DATA_DIR
+  pixell.colorize.mpl_setdefault("planck")
+#+END_SRC
+
+* Generation of the templates, mask and apodisation type
+
+We start by specifying the =CAR= survey parameters, it will go from right ascension =ra0= to =ra1= and
+from declination =dec0= to =dec1= (all in degrees) with a resolution of 1 arcminute.
+#+BEGIN_SRC jupyter-python :results none
+  ra0, ra1, dec0, dec1 = -25, 25, -25, 25
+  res = 1
+#+END_SRC
+
+For this example, we will make use of 3 components : Temperature (spin 0) and polarisation Q and U
+(spin 2)
+#+BEGIN_SRC jupyter-python :results none
+  ncomp = 3
+#+END_SRC
+
+Given the parameters, we can generate the =CAR= template as follow
+#+BEGIN_SRC jupyter-python :results none
+  from pspy import so_map
+  template_car = so_map.car_template(ncomp, ra0, ra1, dec0, dec1, res)
+#+END_SRC
+
+We also define the binary template for the window function pixels: we set pixels inside the survey
+at 1 and at the border to be zero
+#+BEGIN_SRC jupyter-python :results none
+  binary_car = so_map.car_template(1, ra0, ra1, dec0, dec1, res)
+  binary_car.data[:] = 0
+  binary_car.data[1:-1, 1:-1] = 1
+#+END_SRC
+
+* Generation of spectra
+** Generation of simulations
+We first generate a CMB realisation from an already computed =CAMB= file
+#+BEGIN_SRC jupyter-python :results none
+  cl_file = os.path.join(DEFAULT_DATA_DIR, "bode_almost_wmap5_lmax_1e4_lensedCls_startAt2.dat")
+  cmb = template_car.synfast(cl_file)
+#+END_SRC
+
+Then, we make 2 splits out of it, each with 20 µK.arcmin rms in T and 20xsqrt(2) µK.arcmin in
+polarisation
+
+#+BEGIN_SRC jupyter-python :results none
+  nsplits = 2
+  splits = [cmb.copy() for i in range(nsplits)]
+  for i in range(nsplits):
+      noise = so_map.white_noise(cmb, rms_uKarcmin_T=20, rms_uKarcmin_pol=np.sqrt(2)*20)
+      splits[i].data += noise.data
+#+END_SRC
+
+We can plot each component T, Q, U for both splits and for the original CMB realisation. We scale
+the color map
+#+BEGIN_SRC jupyter-python
+  fig, axes = plt.subplots(3, 3, figsize=(9, 9), sharex=True, sharey=True)
+  fields = ["T", "Q", "U"]
+  kwargs = dict(extent=[ra1, ra0, dec0, dec1], origin="lower")
+  for i, field in enumerate(fields):
+      axes[0, i].set_title(fields[i])
+      vrange = {"vmin": np.min([cmb.data[i], splits[0].data[i], splits[1].data[i]]),
+                "vmax": np.max([cmb.data[i], splits[0].data[i], splits[1].data[i]])}
+      axes[0, i].imshow(cmb.data[i], **kwargs, **vrange)
+      axes[1, i].imshow(splits[0].data[i], **kwargs, **vrange)
+      axes[2, i].imshow(splits[1].data[i], **kwargs, **vrange)
+
+  axes[0, 0].set_ylabel("original")
+  axes[1, 0].set_ylabel("split 0")
+  axes[2, 0].set_ylabel("split 1")
+  plt.tight_layout()
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/0e48d4d665e0e36ee697fc3a9e404c2142b11b72.png]]
+
+** Generate window
+We then apodize the survey mask with a "Rectangle" pattern designed for rectangle maps and with 1
+degree beam
+#+BEGIN_SRC jupyter-python :results none
+  from pspy import so_window
+  window = so_window.create_apodization(binary_car, apo_type="Rectangle", apo_radius_degree=1)
+#+END_SRC
+
+We also create a point source mask made of 100 holes each with a 10 arcminutes size
+#+BEGIN_SRC jupyter-python :results none
+  mask = so_map.simulate_source_mask(binary_car, nholes=100, hole_radius_arcmin=10)
+#+END_SRC
+and we apodize it
+#+BEGIN_SRC jupyter-python :results none
+  mask = so_window.create_apodization(mask, apo_type="C1", apo_radius_degree=0.3)
+#+END_SRC
+
+The window is given by the product of the survey window and the mask window
+#+BEGIN_SRC jupyter-python
+  window.data *= mask.data
+  plt.figure(figsize=(5, 5))
+  plt.imshow(window.data, **kwargs, vmin=-1, vmax=+1)
+#+END_SRC
+
+#+RESULTS:
+:RESULTS:
+: <matplotlib.image.AxesImage at 0x7fde65cad160>
+[[file:./.ob-jupyter/8e130431cf9ab1d4e0179d5bb1823bf18cbe8d97.png]]
+:END:
+
+** Compute mode coupling matrix
+For spin 0 and 2 the window need to be a tuple made of two objects: the window used for spin 0 and the
+one used for spin 2
+#+BEGIN_SRC jupyter-python :results none
+  window = (window, window)
+#+END_SRC
+
+The windows (for =spin0= and =spin2=) are going to couple mode together, we compute a mode coupling
+matrix in order to undo this effect given a binning file (format: lmin, lmax, lmean) and a
+\(\ell\)_{max} value of 1000
+#+BEGIN_SRC jupyter-python :results none
+  lmax = 1000
+  binning_file = os.path.join(DEFAULT_DATA_DIR, "BIN_ACTPOL_50_4_SC_low_ell_startAt2.dat")
+  from pspy import so_mcm
+  mbb_inv, Bbl = so_mcm.mcm_and_bbl_spin0and2(window, binning_file, lmax=lmax, type="Dl", niter=0)
+#+END_SRC
+
+*** Plot mbb                                                     :noexport:
+#+BEGIN_SRC jupyter-python
+  fig, axes = plt.subplots(3, 2, figsize=(6, 9))
+  for i, label in enumerate(["spin0xspin0", "spin0xspin2", "spin2xspin2"]):
+      mat = mbb_inv[label].copy()
+      diagonal = np.eye(mat.shape[0], dtype=bool)
+      mat[~diagonal] = np.nan
+      axes[i, 0].matshow(mat)
+      mat = mbb_inv[label].copy()
+      mat[diagonal] = np.nan
+      axes[i, 1].matshow(mat)
+      axes[i, 0].set_ylabel(label)
+      #  plt.colorbar(orientation="horizontal")
+  # print(np.diag(mbb_inv["spin0xspin0"]))
+#+END_SRC
+
+
+#+RESULTS:
+[[file:./.ob-jupyter/a0d8e3a70eeae2ceb1fdbe604e88be5f42153260.png]]
+
+** Compute alms and bin spectra
+#+BEGIN_SRC jupyter-python :results none
+  from pspy import sph_tools
+  alms = [sph_tools.get_alms(split, window, niter=0, lmax=lmax) for split in splits]
+#+END_SRC
+
+We need to specify the order of the spectra to be used by =pspy=
+#+BEGIN_SRC jupyter-python :results none
+  spectra = ["TT", "TE", "TB", "ET", "BT", "EE", "EB", "BE", "BB"]
+#+END_SRC
+and we finally build a dictionary of cross split spectra
+#+BEGIN_SRC jupyter-python :results none
+  Db_dict = {}
+  from itertools import combinations_with_replacement as cwr
+  for (i1, alm1), (i2, alm2) in cwr(enumerate(alms), 2):
+    from pspy import so_spectra
+    l, ps = so_spectra.get_spectra(alm1, alm2, spectra=spectra)
+    lb, Db = so_spectra.bin_spectra(l,
+                                    ps,
+                                    binning_file,
+                                    lmax, type="Dl",
+                                    mbb_inv=mbb_inv,
+                                    spectra=spectra)
+    Db_dict.update({"split{}xsplit{}".format(i1, i2): Db})
+#+END_SRC
+
+To compare with the input $C_\ell$, we also compute the theory spectra and binned spectra
+#+BEGIN_SRC jupyter-python :results none
+  from pspy import pspy_utils
+  l, ps_theory = pspy_utils.ps_lensed_theory_to_dict(cl_file, 'Dl', lmax=lmax)
+  ps_theory_b = so_mcm.apply_Bbl(Bbl, ps_theory, spectra=spectra)
+#+END_SRC
+
+and we finally plot all the results
+#+BEGIN_SRC jupyter-python
+  fig, axes = plt.subplots(3, 3, figsize=(15, 12), sharex=True)
+  ax = axes.flatten()
+  for i, spec in enumerate(spectra):
+      for k, v in Db_dict.items():
+          ax[i].plot(lb, v[spec], "-o", label=k)
+      ax[i].plot(lb, ps_theory_b[spec], "o", color="tab:red", label="binned theory")
+      ax[i].plot(l, ps_theory[spec], color="tab:red", label="theory")
+      ax[i].set_ylabel(r'$D^{%s}_{\ell}$'%spec, fontsize=20)
+      if i==0:
+          fig.legend(loc="upper left", bbox_to_anchor=(1,1))
+
+  for ax in axes[-1]:
+      ax.set_xlabel(r'$\ell$',fontsize=20)
+  plt.tight_layout()
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/8dec742a8f48e26f255cf47eb66656185282eea6.png]]
