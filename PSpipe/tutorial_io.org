@@ -1,0 +1,162 @@
+#+TITLE: Tutorial on how to read/write/plot SO map
+#+PROPERTY: header-args:jupyter-python :session tutorial_io
+#+PROPERTY: header-args :exports both
+#+PROPERTY: header-args :tangle tutorial_io.py
+
+* Introduction
+
+This tutorial shows how to read/write and plot a SO map. We will use both pixellisation /i.e./ =CAR= and
+=HEALPIX= with the same interface showing how =pspy= can deal with both data format.
+
+* Emacs config                                                     :noexport:
+
+#+BEGIN_SRC elisp :session tutorial_io :results none :tangle no
+  (setenv "WORKON_HOME" (concat (getenv "HOME") "/Workdir/CMB/development/PSpipe"))
+  (pyvenv-workon "pyenv")
+#+END_SRC
+
+* Preamble
+Versions used for this tutorial
+#+BEGIN_SRC jupyter-python
+  %matplotlib inline
+  import os
+  import numpy as np
+  import matplotlib as mpl
+  import matplotlib.pyplot as plt
+  import pspy, pixell
+  print("     Numpy :", np.__version__)
+  print("Matplotlib :", mpl.__version__)
+  print("    pixell :", pixell.__version__)
+  # print("      pspy :", pspy.__version__)
+#+END_SRC
+
+#+RESULTS:
+:      Numpy : 1.17.4
+: Matplotlib : 3.1.2
+:     pixell : 0.6.0+34.g23be32d
+
+Get default data dir from =pspy= and set Planck colormap as default
+#+BEGIN_SRC jupyter-python :results none
+  from pspy.so_config import DEFAULT_DATA_DIR
+  pixell.colorize.mpl_setdefault("planck")
+#+END_SRC
+
+* Generation of CAR and HEALPIX templates
+
+We start with the definition of the =CAR= template, it will go from right ascension =ra0= to =ra1= and
+from declination =dec0= to =dec1= (all in degrees). The resolution will be 1 arcminute and we will allow
+3 components (stokes parameter in the case of CMB anisotropies)
+#+BEGIN_SRC jupyter-python :results none
+  ra0, ra1, dec0, dec1 = -5, 5, -5, 5
+  res = 1
+  ncomp = 3
+  from pspy import so_map
+  template_car= so_map.car_template(ncomp, ra0, ra1, dec0, dec1, res)
+#+END_SRC
+
+We do the same with =HEALPIX=
+#+BEGIN_SRC jupyter-python :results none
+  template_healpix = so_map.healpix_template(ncomp, nside=256, coordinate="equ")
+#+END_SRC
+
+* Simulation of CMB data
+We first read precomputed $C_\ell$ data and we fill the templates with them
+#+BEGIN_SRC jupyter-python :results none
+  cl_file = os.path.join(DEFAULT_DATA_DIR, "bode_almost_wmap5_lmax_1e4_lensedCls_startAt2.dat")
+  cmb_car = template_car.synfast(cl_file)
+  cmb_healpix = template_healpix.synfast(cl_file)
+#+END_SRC
+
+We can plot both maps, first for the =CAR= pixellisation
+#+BEGIN_SRC jupyter-python
+  fig, axes = plt.subplots(1, 3, figsize=(10, 5), sharey=True)
+  fields = ["T", "Q", "U"]
+  kwargs = dict(extent=[ra1, ra0, dec0, dec1], origin="lower")
+  for i, field in enumerate(fields):
+      im = axes[i].imshow(cmb_car.data[i], **kwargs)
+      axes[i].set_title(fields[i])
+      fig.colorbar(im, ax=axes[i], orientation="horizontal", shrink=0.9)
+
+  axes[0].set_ylabel(r"$\delta$ [deg]")
+  for ax in axes: ax.set_xlabel(r"$\alpha$ [deg]")
+  plt.tight_layout()
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/070adab1ffb97dde172344b0e8e4fa64acb833b5.png]]
+
+then for the =HEALPIX= pixellisation
+#+BEGIN_SRC jupyter-python
+  import healpy as hp
+  plt.figure(figsize=(12,8))
+  for i, field in enumerate(fields):
+      hp.mollview(cmb_healpix.data[i], title=field, sub=(1, ncomp, i+1))
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/742b4bd45c25b0797c728c0e6de5a8ba7b13c27f.png]]
+
+Actually, saving CMB maps can be done with the =so_map.plot= function which can be used interactively
+(maps will popup /via/ an external image viewer program) but can also be used to store each CMB maps
+(T, Q, U) inside a directory as follow
+#+BEGIN_SRC jupyter-python :results none
+  output_dir = "/tmp/tutorial_io"
+  os.makedirs(output_dir, exist_ok=True)
+  cmb_car.plot(file_name="{}/map_car_io".format(output_dir))
+  cmb_healpix.plot(file_name="{}/map_healpix_io".format(output_dir))
+#+END_SRC
+
+* Writing/reading SO maps
+
+Maps can also be write to disk in =fits= format with the =so_map.write_map= function
+#+BEGIN_SRC jupyter-python :results none
+  cmb_car.write_map("{}/map_car.fits".format(output_dir))
+  cmb_healpix.write_map("{}/map_healpix.fits".format(output_dir))
+#+END_SRC
+
+We can read them back
+#+BEGIN_SRC jupyter-python :results none
+  cmb_car2 = so_map.read_map("{}/map_car.fits".format(output_dir))
+  cmb_healpix2 = so_map.read_map("{}/map_healpix.fits".format(output_dir))
+#+END_SRC
+
+We null them
+#+BEGIN_SRC jupyter-python :results none
+  cmb_car2.data -= cmb_car.data
+  cmb_healpix2.data -= cmb_healpix.data
+#+END_SRC
+and plot the nulls
+#+BEGIN_SRC jupyter-python
+  fig, axes = plt.subplots(1, 3, figsize=(10, 5), sharey=True)
+  fields = ["T", "Q", "U"]
+  kwargs = dict(extent=[ra1, ra0, dec0, dec1], origin="lower")
+  for i, field in enumerate(fields):
+      im = axes[i].imshow(cmb_car2.data[i], **kwargs)
+      axes[i].set_title(fields[i])
+      fig.colorbar(im, ax=axes[i], orientation="horizontal", shrink=0.9)
+
+  axes[0].set_ylabel(r"$\delta$ [deg]")
+  for ax in axes: ax.set_xlabel(r"$\alpha$ [deg]")
+  plt.tight_layout()
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/516c5a2310144b1a52d648e6f5a7f934aab7511f.png]]
+
+#+BEGIN_SRC jupyter-python
+  import healpy as hp
+  plt.figure(figsize=(12,8))
+  for i, field in enumerate(fields):
+      hp.mollview(cmb_healpix2.data[i], title=field, sub=(1, ncomp, i+1))
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/5486074bfa6815bb524f53a98d4a80d90a6dc72b.png]]
+
+Note that while =CAR= is zero, some low amplitude numerical noise is there in =HEALPIX=.
+#+BEGIN_SRC jupyter-python
+  np.allclose(cmb_car2.data[0], 0), np.allclose(cmb_healpix2.data[0], 0)
+#+END_SRC
+
+#+RESULTS:
+| True | False |
