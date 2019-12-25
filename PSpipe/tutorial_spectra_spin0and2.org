@@ -18,7 +18,7 @@ with an apodisation of 0.3 degree. We finally compute the spectra between the 2 
 
 * Emacs config                                                     :noexport:
 
-#+BEGIN_SRC elisp :session example_projection :results none :tangle no
+#+BEGIN_SRC elisp :session tutorial_spectra_spin0and2 :results none :tangle no
   (setenv "WORKON_HOME" (concat (getenv "HOME") "/Workdir/CMB/development/PSpipe"))
   (pyvenv-workon "pyenv")
 #+END_SRC

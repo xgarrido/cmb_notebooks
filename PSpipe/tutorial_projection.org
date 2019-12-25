@@ -13,7 +13,7 @@ native =CAR= simulation and the projected =HEALPIX= simulation. We chose a low r
 emphasize the effect of resolution
 
 * Emacs config                                                     :noexport:
-#+BEGIN_SRC elisp :session example_projection :results none :tangle no
+#+BEGIN_SRC elisp :session tutorial_projection :results none :tangle no
   (setenv "WORKON_HOME" (concat (getenv "HOME") "/Workdir/CMB/development/PSpipe"))
   (pyvenv-workon "pyenv")
 #+END_SRC
