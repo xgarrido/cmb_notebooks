@@ -1,11 +1,11 @@
-#+TITLE: Example of generation of spectra for spin 0 and 2 fields
+#+TITLE: Tutorial of generation of spectra for spin 0 and 2 fields
 #+PROPERTY: header-args:jupyter-python :session example_spectra_spin0and2
 #+PROPERTY: header-args :exports both
 #+PROPERTY: header-args :tangle example_spectra_spin0and2.py
 
 * Introduction
 
-This example shows the spectra generation for spin 0 and 2 fields. We will only use the =CAR=
+This tutorial shows the spectra generation for spin 0 and 2 fields. We will only use the =CAR=
 pixellisation to pass through the different steps of generation. If you are interested on doing the
 same thing with =HEALPIX= pixellisation, you can have a look to the file
 =example_spectra_car_healpix.ipynb=.
