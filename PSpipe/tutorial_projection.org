@@ -1,4 +1,4 @@
-#+TITLE: Tutorial of generation of simulations and projection
+#+TITLE: Tutorial on generation of simulations and projection
 #+PROPERTY: header-args:jupyter-python :session tutorial_projection
 #+PROPERTY: header-args :exports both
 #+PROPERTY: header-args :tangle tutorial_projection.py
@@ -14,13 +14,18 @@ emphasize the effect of resolution
 
 * Emacs config                                                     :noexport:
 #+BEGIN_SRC elisp :session tutorial_projection :results none :tangle no
-  (setenv "WORKON_HOME" (concat (getenv "HOME") "/Workdir/CMB/development/PSpipe"))
+  (setenv "WORKON_HOME" (concat (getenv "HOME") "/Workdir/CMB/development/pspy"))
   (pyvenv-workon "pyenv")
 #+END_SRC
 
 * Preamble
-#+BEGIN_SRC jupyter-python
+=matplotlib= magic
+#+BEGIN_SRC jupyter-python :results none :tangle no
   %matplotlib inline
+#+END_SRC
+
+Print versions used
+#+BEGIN_SRC jupyter-python
   import os
   import numpy as np
   import matplotlib as mpl
@@ -29,19 +34,19 @@ emphasize the effect of resolution
   print("     Numpy :", np.__version__)
   print("Matplotlib :", mpl.__version__)
   print("    pixell :", pixell.__version__)
-  # print("      pspy :", pspy.__version__)
+  print("      pspy :", pspy.__version__)
 #+END_SRC
 
 #+RESULTS:
-:      Numpy : 1.17.4
+:      Numpy : 1.18.0
 : Matplotlib : 3.1.2
 :     pixell : 0.6.0+34.g23be32d
-: /home/garrido/Workdir/CMB/development/PSpipe/software/pspy/__init__.py
+:       pspy : 0.1.0
 
 Get default data dir from =pspy= and set Planck colormap as default
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC jupyter-python :results none
   from pspy.so_config import DEFAULT_DATA_DIR
-  pixell.colorize.mpl_setdefault("planck")
+  pixell.colorize.mpl_setdefault("cubehelix")
 #+END_SRC
 
 #+RESULTS:

@@ -1,4 +1,4 @@
-#+TITLE: Tutorial of generation of spectra for spin 0 and 2 fields
+#+TITLE: Tutorial on generation of spectra for spin 0 and 2 fields
 #+PROPERTY: header-args:jupyter-python :session tutorial_spectra_spin0and2
 #+PROPERTY: header-args :exports both
 #+PROPERTY: header-args :tangle tutorial_spectra_spin0and2.py
