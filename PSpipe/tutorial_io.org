@@ -19,7 +19,6 @@ This tutorial shows how to read/write and plot a SO map. We will use both pixell
 Versions used for this tutorial
 #+BEGIN_SRC jupyter-python
   %matplotlib inline
-  import os
   import numpy as np
   import matplotlib as mpl
   import matplotlib.pyplot as plt
@@ -65,7 +64,7 @@ We first have to compute $C_\ell$ data using a cosmology code such as [[https://
 since this is a prerequisite of =pspy=. We can do it within this notebook by executing the following
 command
 #+BEGIN_SRC jupyter-python
-  !pip install camb
+  %pip install camb
 #+END_SRC
 
 #+RESULTS:
@@ -135,9 +134,10 @@ We can plot the results for sanity check
 #+RESULTS:
 [[file:./.ob-jupyter/f6bb8dd0ed8b51b1e30cedeac50a8c7a664d95cb.png]]
 
-We finally have to write $C_\ell$ into a file to feed the =so_map.synfast= function
-
+We finally have to write $C_\ell$ into a file to feed the =so_map.synfast= function for both
+pixellisation templates
 #+BEGIN_SRC jupyter-python :results none
+  import os
   output_dir = "/tmp/tutorial_io"
   os.makedirs(output_dir, exist_ok=True)
   cl_file = output_dir + "/cl_camb.dat"
