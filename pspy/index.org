@@ -1,0 +1,16 @@
+#+TITLE: pspy tutorials index
+
+* pspy tutorials
+
+This directory holds several tutorials on how to use =pspy= API. They can be interactively run /via/
+[[https://mybinder.org/][mybinder]]
+
+[[https://mybinder.org/v2/gh/simonsobs/LAT_MFLike/master?filepath=notebooks%2Fmflike_tutorial.ipynb][https://mybinder.org/badge_logo.svg]]
+
+List of tutorials:
+
+- [[file:tutorial_io.ipynb][=tutorial_io=]] shows how to read/write/plot SO map
+
+- [[file:tutorial_projection.ipynb][=tutorial_projection=]] explains how to project an =HEALPIX= map to a =CAR= pixellised map
+
+- [[file:tutorial_projection.ipynb][=tutorial_projection=]] shows how to generate spin0 and spin2 spectra for =CAR= pixellisation

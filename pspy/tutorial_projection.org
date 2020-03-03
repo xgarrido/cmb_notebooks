@@ -26,7 +26,6 @@ emphasize the effect of resolution
 
 Print versions used
 #+BEGIN_SRC jupyter-python
-  import os
   import numpy as np
   import matplotlib as mpl
   import matplotlib.pyplot as plt
@@ -41,15 +40,13 @@ Print versions used
 :      Numpy : 1.18.0
 : Matplotlib : 3.1.2
 :     pixell : 0.6.0+34.g23be32d
-:       pspy : 0.1.0
+:       pspy : 0+untagged.88.g1ef44db
 
 Get default data dir from =pspy= and set Planck colormap as default
 #+BEGIN_SRC jupyter-python :results none
   from pspy.so_config import DEFAULT_DATA_DIR
-  pixell.colorize.mpl_setdefault("cubehelix")
+  pixell.colorize.mpl_setdefault("planck")
 #+END_SRC
-
-#+RESULTS:
 
 * Generation of the templates
 
@@ -57,7 +54,7 @@ The =CAR= template will go from right ascension =ra0= to =ra1= and from declinat
 degrees). It will have a resolution of 1 arcminute and it allows 3 components (stokes parameter in
 the case of CMB anisotropies).
 
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC jupyter-python :results none
   ra0, ra1 = -5, 5
   dec0, dec1 = -5, 5
   res = 1
@@ -66,45 +63,86 @@ the case of CMB anisotropies).
   template_car = so_map.car_template(ncomp, ra0, ra1, dec0, dec1, res)
 #+END_SRC
 
-#+RESULTS:
-
 We also generate an =HEALPIX= template for which we choose ~nside=256~ so that the resolution of =HEALPIX=
 is much smaller
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC jupyter-python :results none
   template_healpix = so_map.healpix_template(ncomp, nside=256, coordinate="equ")
 #+END_SRC
 
-#+RESULTS:
 
 * Read power spectrum and alm generation
-We read a =CAMB= lensed power spectrum
+We first have to compute $C_\ell$ data using a cosmology code such as [[https://camb.readthedocs.io/en/latest/][CAMB]] and we need to install it
+since this is a prerequisite of =pspy=. We can do it within this notebook by executing the following
+command
 #+BEGIN_SRC jupyter-python
-  from pixell import powspec
-  clfile = os.path.join(DEFAULT_DATA_DIR, "bode_almost_wmap5_lmax_1e4_lensedCls.dat")
-  ps = powspec.read_spectrum(clfile)[:ncomp,:ncomp]
+  %pip install camb
 #+END_SRC
 
 #+RESULTS:
+: Requirement already satisfied: camb in /home/garrido/Workdir/CMB/development/pspy/pyenv/lib/python3.8/site-packages (1.1.0)
+: Requirement already satisfied: scipy>=1.0 in /home/garrido/Workdir/CMB/development/pspy/pyenv/lib/python3.8/site-packages (from camb) (1.4.1)
+: Requirement already satisfied: six in /home/garrido/Workdir/CMB/development/pspy/pyenv/lib/python3.8/site-packages (from camb) (1.13.0)
+: Requirement already satisfied: sympy>=1.0 in /home/garrido/Workdir/CMB/development/pspy/pyenv/lib/python3.8/site-packages (from camb) (1.5)
+: Requirement already satisfied: numpy>=1.13.3 in /home/garrido/Workdir/CMB/development/pspy/pyenv/lib/python3.8/site-packages (from scipy>=1.0->camb) (1.18.0)
+: Requirement already satisfied: mpmath>=0.19 in /home/garrido/Workdir/CMB/development/pspy/pyenv/lib/python3.8/site-packages (from sympy>=1.0->camb) (1.1.0)
+: Note: you may need to restart the kernel to use updated packages.
+
+To make sure everything goes well, we can import =CAMB= and check its version
+#+BEGIN_SRC jupyter-python
+  import camb
+  print("CAMB version:", camb.__version__)
+#+END_SRC
+
+#+RESULTS:
+: CAMB version: 1.1.0
+
+Now that =CAMB= is properly installed, we will produce $C_\ell$ data from \(\ell\)_{min}=2 to
+\(\ell\)_{max}=10^{4} for the following set of \(\Lambda\)CDM parameters
+#+BEGIN_SRC jupyter-python :results none
+  lmin, lmax = 2, 10**4
+  l = np.arange(lmin, lmax)
+  cosmo_params = {
+      "H0": 67.5,
+      "As": 1e-10*np.exp(3.044),
+      "ombh2": 0.02237,
+      "omch2": 0.1200,
+      "ns": 0.9649,
+      "Alens": 1.0,
+      "tau": 0.0544
+  }
+  pars = camb.set_params(**cosmo_params)
+  pars.set_for_lmax(lmax, lens_potential_accuracy=1)
+  results = camb.get_results(pars)
+  powers = results.get_cmb_power_spectra(pars, CMB_unit="muK")
+#+END_SRC
+
+We finally have to write $C_\ell$ into a file to read back using the =pixell.powspec= function
+#+BEGIN_SRC jupyter-python :results none
+  import os
+  output_dir = "/tmp/tutorial_projection"
+  os.makedirs(output_dir, exist_ok=True)
+  cl_file = output_dir + "/cl_camb.dat"
+  np.savetxt(cl_file,
+             np.hstack([l[:, np.newaxis], powers["total"][lmin:lmax]]))
+
+  from pixell import powspec
+  ps = powspec.read_spectrum(cl_file)[:ncomp,:ncomp]
+#+END_SRC
 
 and generate alms from the power spectrum up to ~lmax = 5000~
-
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC jupyter-python :results none
   from pixell import curvedsky
   lmax = 5000
   alms = curvedsky.rand_alm(ps, lmax=lmax)
 #+END_SRC
 
-#+RESULTS:
-
 * Computation of stokes parameters
 We compute the stokes parameters from the alms in both templates
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC jupyter-python :results none
   from pspy import sph_tools
   map_healpix = sph_tools.alm2map(alms, template_healpix)
   map_car = sph_tools.alm2map(alms, template_car)
 #+END_SRC
-
-#+RESULTS:
 
 and we project the =HEALPIX= map into the =CAR= template
 #+BEGIN_SRC jupyter-python
@@ -139,19 +177,14 @@ have different resolutions.
 #+END_SRC
 
 #+RESULTS:
-[[file:./.ob-jupyter/2c59d718615b4bd27524953d8d93fac68dbe7826.png]]
+[[file:./.ob-jupyter/027dd7a74b0b6e32854273c5e1b8d408ff9c9481.png]]
 
 We can also use the =plot= function from =pspy.so_map= and set the output path to get individual images
 for each component T, Q, U.
-#+BEGIN_SRC jupyter-python
-  output_dir = "/tmp/example_projection"
-  os.makedirs(output_dir, exist_ok=True)
+#+BEGIN_SRC jupyter-python :results none
   map_car.plot(file_name=output_dir + "/map_car")
   map_healpix_proj.plot(file_name=output_dir + "/map_healpix")
 #+END_SRC
-
-#+RESULTS:
-
 
 * Misc                                                             :noexport:
 #+BEGIN_SRC jupyter-python

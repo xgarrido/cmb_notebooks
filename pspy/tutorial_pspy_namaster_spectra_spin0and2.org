@@ -1,0 +1,449 @@
+#+TITLE: Tutorial on generation of spectra for spin 0 and 2 fields with pspy and namaster
+#+PROPERTY: header-args:jupyter-python :session tutorial_pspy_namaster_spectra_spin0and2
+#+PROPERTY: header-args :exports both
+#+PROPERTY: header-args :tangle tutorial_pspy_namaster_spectra_spin0and2.py
+
+* Introduction
+
+This tutorial shows the spectra generation for spin 0 and 2 fields with =pspy= and =NaMaster= and
+compare results of both codes.
+
+* Emacs config                                                     :noexport:
+
+#+BEGIN_SRC elisp :session tutorial_pspy_namaster_spectra_spin0and2 :results none :tangle no
+  (setenv "WORKON_HOME" (concat (getenv "HOME") "/Workdir/CMB/development/PSpipe"))
+  (pyvenv-workon "pyenv")
+#+END_SRC
+
+* Preamble
+=matplotlib= magic
+#+BEGIN_SRC jupyter-python :results none :tangle no
+  %matplotlib inline
+#+END_SRC
+
+Versions used for this tutorial
+#+BEGIN_SRC jupyter-python
+  import numpy as np
+  import matplotlib as mpl
+  import matplotlib.pyplot as plt
+  import healpy as hp
+  import pspy
+  import pymaster as nmt
+  print("     Numpy :", np.__version__)
+  print("Matplotlib :", mpl.__version__)
+  print("    healpy :", hp.__version__)
+  print("      pspy :", pspy.__version__)
+  # print("  namaster :", nmt.__version__)
+#+END_SRC
+
+#+RESULTS:
+:      Numpy : 1.18.1
+: Matplotlib : 3.1.2
+:     healpy : 1.13.0
+:       pspy : 1.0.0+130.g2de8443
+
+We use the Planck colormap as default /via/ =pixell=
+#+BEGIN_SRC jupyter-python :results none
+  from pixell import colorize
+  colorize.mpl_setdefault("planck")
+#+END_SRC
+
+* Generation of the template and mask
+
+We start by specifying the =HEALPIX= survey parameters. It will be a disk of radius 25 degree centered
+on longitude 30 degree and latitude 50 degree with a resolution ~nside=512~.
+
+#+BEGIN_SRC jupyter-python :results none
+  lon, lat = 30, 50
+  radius = 25
+  nside = 512
+#+END_SRC
+
+For this example, we will make use of 3 components : Temperature (spin 0) and polarisation Q and U
+(spin 2)
+#+BEGIN_SRC jupyter-python :results none
+  ncomp = 3
+#+END_SRC
+
+Given the parameters, we can generate the HEALPIX template as follow
+#+BEGIN_SRC jupyter-python :results none
+  from pspy import so_map
+  template_healpix = so_map.healpix_template(ncomp, nside=nside)
+#+END_SRC
+
+We also define a binary template for the window function: we set pixel inside the disk at 1 and pixel outside at zero
+#+BEGIN_SRC jupyter-python :results none
+  binary_healpix = so_map.healpix_template(ncomp=1, nside=nside)
+  vec = hp.pixelfunc.ang2vec(lon, lat, lonlat=True)
+  disc = hp.query_disc(nside, vec, radius=np.deg2rad(radius))
+  binary_healpix.data[disc] = 1
+#+END_SRC
+
+* Generation of spectra
+** Generation of simulations
+We first have to compute $C_\ell$ data using a cosmology code such as [[https://camb.readthedocs.io/en/latest/][CAMB]].
+#+BEGIN_SRC jupyter-python
+  import camb
+  print("CAMB version:", camb.__version__)
+#+END_SRC
+
+#+RESULTS:
+: CAMB version: 1.1.0
+
+We will produce $C_\ell$ data from \(\ell\)_{min}=2 to \(\ell\)_{max}=10^{4} for the following set
+of \(\Lambda\)CDM parameters
+#+BEGIN_SRC jupyter-python :results none
+  lmin, lmax = 2, 10**4
+  l = np.arange(lmin, lmax)
+  cosmo_params = {
+      "H0": 67.5,
+      "As": 1e-10*np.exp(3.044),
+      "ombh2": 0.02237,
+      "omch2": 0.1200,
+      "ns": 0.9649,
+      "Alens": 1.0,
+      "tau": 0.0544
+  }
+  pars = camb.set_params(**cosmo_params)
+  pars.set_for_lmax(lmax, lens_potential_accuracy=1)
+  results = camb.get_results(pars)
+  powers = results.get_cmb_power_spectra(pars, CMB_unit="muK")
+#+END_SRC
+
+We finally have to write $C_\ell$ into a file to feed the =so_map.synfast= function for both
+pixellisation templates
+#+BEGIN_SRC jupyter-python :results none
+  import os
+  output_dir = "/tmp/tutorial_pspy_namaster_spectra_spin0and2"
+  os.makedirs(output_dir, exist_ok=True)
+  cl_file = output_dir + "/cl_camb.dat"
+  np.savetxt(cl_file,
+             np.hstack([l[:, np.newaxis], powers["total"][lmin:lmax]]))
+#+END_SRC
+
+Given the =CAMB= file, we generate a CMB realisation
+#+BEGIN_SRC jupyter-python :results none
+  cmb = template_healpix.synfast(cl_file)
+#+END_SRC
+on which we add white noise /i.e./ 20 µK.arcmin rms in temperature and 20xsqrt(2) µK.arcmin in
+polarisation
+#+BEGIN_SRC jupyter-python :results none
+  noise = so_map.white_noise(cmb, rms_uKarcmin_T=20, rms_uKarcmin_pol=np.sqrt(2)*20)
+  cmb.data += noise.data
+#+END_SRC
+
+We can plot each component T, Q, U
+#+BEGIN_SRC jupyter-python
+  fields = ["T", "Q", "U"]
+  for i, field in enumerate(fields):
+      hp.mollview(cmb.data[i], title="{}".format(field))
+#+END_SRC
+
+#+RESULTS:
+:RESULTS:
+[[file:./.ob-jupyter/6084dac2b91085c02748f589517f628290dcee9c.png]]
+[[file:./.ob-jupyter/555c92529971af6d9ad03c6cb0c9fd9d2ccfc41e.png]]
+[[file:./.ob-jupyter/2f6005818206758bcbb80fbd73502cbe22ae1024.png]]
+:END:
+
+** Generate window
+We then create an apodisation for the survey mask. We use a C1 apodisation with an apodisation size of 1 degree
+#+BEGIN_SRC jupyter-python :results none
+  from pspy import so_window
+  window = so_window.create_apodization(binary_healpix, apo_type="C1", apo_radius_degree=1)
+#+END_SRC
+
+We also create a point source mask made of 10 holes each with a 30 arcminutes size
+#+BEGIN_SRC jupyter-python :results none
+  mask = so_map.simulate_source_mask(binary_healpix, n_holes=10, hole_radius_arcmin=30)
+#+END_SRC
+and we apodize it
+#+BEGIN_SRC jupyter-python :results none
+  mask = so_window.create_apodization(mask, apo_type="C1", apo_radius_degree=1)
+#+END_SRC
+
+The window is given by the product of the survey window and the mask window
+#+BEGIN_SRC jupyter-python
+  window.data *= mask.data
+  hp.mollview(window.data, min=0, max=1)
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/7ed9c76b8fa1aef8cd66a039e04a14ea9dfb5907.png]]
+
+* Compute spin 0 and spin 2 spectra a la pspy
+For spin 0 and 2 the window need to be a tuple made of two objects: the window used for spin 0 and the
+one used for spin 2
+#+BEGIN_SRC jupyter-python :results none
+  window = (window, window)
+#+END_SRC
+
+We also set the number of iterations for the harmonic transform computation to 3
+#+BEGIN_SRC jupyter-python :results none
+  niter = 3
+#+END_SRC
+
+The windows (for =spin0= and =spin2=) are going to couple mode together, we compute a mode coupling
+matrix in order to undo this effect given a binning file (format: lmin, lmax, lmean) and a
+\(\ell\)_{max} value corresponding to the maximum multiple to consider ~3*nside-1~
+#+BEGIN_SRC jupyter-python :results none
+  lmax = 3 * nside -1
+  binning_file = output_dir + "/binning.dat"
+  from pspy import pspy_utils
+  pspy_utils.create_binning_file(bin_size=40, n_bins=100, file_name=binning_file)
+  from pspy import so_mcm
+  mbb_inv, Bbl = so_mcm.mcm_and_bbl_spin0and2(window, binning_file, lmax=lmax, type="Cl", niter=niter)
+#+END_SRC
+
+Compute alms and get binned and unbinned spectra
+#+BEGIN_SRC jupyter-python :results none
+  from pspy import sph_tools, so_spectra
+  alms = sph_tools.get_alms(cmb, window, niter=niter, lmax=lmax)
+  spectra = ["TT", "TE", "TB", "ET", "BT", "EE", "EB", "BE", "BB"]
+  ell, ps = so_spectra.get_spectra(alms, spectra=spectra)
+  lb_pspy, Clb_pspy = so_spectra.bin_spectra(ell, ps, binning_file, lmax, type="Cl", mbb_inv=mbb_inv, spectra=spectra)
+#+END_SRC
+
+* Compute spin 0 and spin 2 spectra a la NaMaster
+
+We first define =NaMaster= fields corresponding to each spins
+#+BEGIN_SRC jupyter-python :results none
+  field_0 = nmt.NmtField(window[0].data, [cmb.data[0]])
+  field_2 = nmt.NmtField(window[1].data, [cmb.data[1], cmb.data[2]])
+#+END_SRC
+
+We also define the binning in $\ell$
+#+BEGIN_SRC jupyter-python :results none
+  nlb = 40
+  b = nmt.NmtBin(nside, nlb=nlb)
+  lb_namaster = b.get_effective_ells()
+#+END_SRC
+
+and the mode coupling matrices
+#+BEGIN_SRC jupyter-python
+  wsp = nmt.NmtWorkspace()
+  wsp.compute_coupling_matrix(field_0, field_2, b, is_teb=True,
+                              n_iter=niter, lmax_mask=lmax)
+#+END_SRC
+
+Finally we compute the different spectra
+#+BEGIN_SRC jupyter-python
+  # Compute mode-coupled Cls (for each pair of fields)
+  cl_coupled_00 = nmt.compute_coupled_cell(field_0, field_0)
+  cl_coupled_02 = nmt.compute_coupled_cell(field_0, field_2)
+  cl_coupled_22 = nmt.compute_coupled_cell(field_2, field_2)
+
+  # Bundle them up
+  cls_coupled = np.array([cl_coupled_00[0],  # TT
+                          cl_coupled_02[0],  # TE
+                          cl_coupled_02[1],  # TB
+                          cl_coupled_22[0],  # EE
+                          cl_coupled_22[1],  # EB
+                          cl_coupled_22[2],  # BE
+                          cl_coupled_22[3]])  # BB
+
+  # Invert MCM
+  cls_uncoupled = wsp.decouple_cell(cls_coupled)
+
+  Clb_namaster = {}
+  Clb_namaster["TT"] = cls_uncoupled[0]
+  Clb_namaster["TE"] = cls_uncoupled[1]
+  Clb_namaster["TB"] = cls_uncoupled[2]
+  Clb_namaster["ET"] = Clb_namaster["TE"]
+  Clb_namaster["BT"] = Clb_namaster["TB"]
+  Clb_namaster["EE"] = cls_uncoupled[3]
+  Clb_namaster["EB"] = cls_uncoupled[4]
+  Clb_namaster["BE"] = cls_uncoupled[5]
+  Clb_namaster["BB"] = cls_uncoupled[6]
+#+END_SRC
+
+#+RESULTS:
+
+* pspy vs. NaMaster : comparisons of spectra
+
+We can compare spectra computations between both codes and show the relative deviation between
+spectra
+#+BEGIN_SRC jupyter-python
+  plt.figure(figsize=(15, 10))
+  grid = plt.GridSpec(3*4, 3, hspace=0)
+
+  for i, spec in enumerate(spectra):
+      ix, iy = 4*(i // 3), i % 3
+      main = plt.subplot(grid[ix:ix+3, iy], xticklabels=[])
+      Dlb_namaster = Clb_namaster[spec]*lb_namaster**2/(2*np.pi)
+      Dlb_pspy = Clb_pspy[spec]*lb_pspy**2/(2*np.pi)
+      main.plot(lb_namaster, Dlb_namaster, "-", color="tab:red", label="namaster")
+      main.plot(lb_pspy, Dlb_pspy, ".k", label="pspy")
+      main.legend(title=r"$D^{%s}_{\ell}$" % spec, title_fontsize=15)
+
+      # Relative deviation
+      if ix != 8: # last
+          dev = plt.subplot(grid[ix+3, iy], xticklabels=[])
+      else:
+          dev = plt.subplot(grid[ix+3, iy])
+          dev.set_xlabel(r"$\ell$", fontsize=15)
+      dev.plot(lb_pspy, (Clb_namaster[spec]-Clb_pspy[spec])/Clb_pspy[spec], ".k")
+  plt.tight_layout()
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/a7bb307e0a7e326364004340665838f4d3e7510a.png]]
+* Profiling pspy vs. NaMaster
+We can profile the time execution of both codes and see if there is any difference. For such
+purpose, we will first encapsulate each processing within dedicated functions
+#+BEGIN_SRC jupyter-python :results none
+  def run_pspy():
+    lmax = 3 * nside -1
+    binning_file = output_dir + "/binning.dat"
+    pspy_utils.create_binning_file(bin_size=40, n_bins=100, file_name=binning_file)
+    mbb_inv, Bbl = so_mcm.mcm_and_bbl_spin0and2(window,
+                                                binning_file,
+                                                lmax=lmax,
+                                                type="Cl",
+                                                niter=niter)
+    alms = sph_tools.get_alms(cmb, window, niter=niter, lmax=lmax)
+    ell, ps = so_spectra.get_spectra(alms, spectra=spectra)
+    lb_pspy, Clb_pspy = so_spectra.bin_spectra(ell,
+                                               ps,
+                                               binning_file,
+                                               lmax,
+                                               type="Cl",
+                                               mbb_inv=mbb_inv,
+                                               spectra=spectra)
+
+  def run_namaster():
+    nlb = 40
+    b = nmt.NmtBin(nside, nlb=nlb)
+    lb_namaster = b.get_effective_ells()
+    wsp = nmt.NmtWorkspace()
+    wsp.compute_coupling_matrix(field_0, field_2, b, is_teb=True,
+                                n_iter=niter, lmax_mask=lmax)
+    cl_coupled_00 = nmt.compute_coupled_cell(field_0, field_0)
+    cl_coupled_02 = nmt.compute_coupled_cell(field_0, field_2)
+    cl_coupled_22 = nmt.compute_coupled_cell(field_2, field_2)
+    cls_coupled = np.array([cl_coupled_00[0],  # TT
+                            cl_coupled_02[0],  # TE
+                            cl_coupled_02[1],  # TB
+                            cl_coupled_22[0],  # EE
+                            cl_coupled_22[1],  # EB
+                            cl_coupled_22[2],  # BE
+                            cl_coupled_22[3]])  # BB
+    cls_uncoupled = wsp.decouple_cell(cls_coupled)
+    Clb_namaster = {k: cls_coupled[i] 
+                    for i, k in enumerate(["TT", "TE", "TB", "EE", "EB", "BE", "BB"])}
+    Clb_namaster["ET"] = Clb_namaster["TE"]
+    Clb_namaster["BT"] = Clb_namaster["TB"]
+#+END_SRC
+
+We will use =line_profiler= package to get a line-by-line profile of each functions
+#+BEGIN_SRC jupyter-python
+  %pip install line_profiler
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+  Collecting line_profiler
+  [?25l  Downloading https://files.pythonhosted.org/packages/69/32/955f09a3064ad032c060797ad7943fef7081038a48030c9b5b280440f0e4/line_profiler-3.0.2-cp38-cp38-manylinux2010_x86_64.whl (69kB)
+[K     |████▊                           | 10kB 24.2MB/s eta 0:00:01[K     |█████████▌                      | 20kB 9.3MB/s eta 0:00:01[K     |██████████████▏                 | 30kB 9.4MB/s eta 0:00:01[K     |███████████████████             | 40kB 8.8MB/s eta 0:00:01[K     |███████████████████████▋        | 51kB 9.3MB/s eta 0:00:01[K     |████████████████████████████▍   | 61kB 9.7MB/s eta 0:00:01[K     |████████████████████████████████| 71kB 6.1MB/s 
+  [?25hRequirement already satisfied: IPython in /home/garrido/Workdir/CMB/development/PSpipe/pyenv/lib/python3.8/site-packages (from line_profiler) (7.11.1)
+  Requirement already satisfied: decorator in /home/garrido/Workdir/CMB/development/PSpipe/pyenv/lib/python3.8/site-packages (from IPython->line_profiler) (4.4.1)
+  Requirement already satisfied: traitlets>=4.2 in /home/garrido/Workdir/CMB/development/PSpipe/pyenv/lib/python3.8/site-packages (from IPython->line_profiler) (4.3.3)
+  Requirement already satisfied: pexpect; sys_platform != "win32" in /home/garrido/Workdir/CMB/development/PSpipe/pyenv/lib/python3.8/site-packages (from IPython->line_profiler) (4.7.0)
+  Requirement already satisfied: prompt-toolkit!=3.0.0,!=3.0.1,<3.1.0,>=2.0.0 in /home/garrido/Workdir/CMB/development/PSpipe/pyenv/lib/python3.8/site-packages (from IPython->line_profiler) (2.0.10)
+  Requirement already satisfied: backcall in /home/garrido/Workdir/CMB/development/PSpipe/pyenv/lib/python3.8/site-packages (from IPython->line_profiler) (0.1.0)
+  Requirement already satisfied: setuptools>=18.5 in /home/garrido/Workdir/CMB/development/PSpipe/pyenv/lib/python3.8/site-packages (from IPython->line_profiler) (41.2.0)
+  Requirement already satisfied: jedi>=0.10 in /home/garrido/Workdir/CMB/development/PSpipe/pyenv/lib/python3.8/site-packages (from IPython->line_profiler) (0.15.2)
+  Requirement already satisfied: pickleshare in /home/garrido/Workdir/CMB/development/PSpipe/pyenv/lib/python3.8/site-packages (from IPython->line_profiler) (0.7.5)
+  Requirement already satisfied: pygments in /home/garrido/Workdir/CMB/development/PSpipe/pyenv/lib/python3.8/site-packages (from IPython->line_profiler) (2.5.2)
+  Requirement already satisfied: ipython-genutils in /home/garrido/Workdir/CMB/development/PSpipe/pyenv/lib/python3.8/site-packages (from traitlets>=4.2->IPython->line_profiler) (0.2.0)
+  Requirement already satisfied: six in /home/garrido/Workdir/CMB/development/PSpipe/pyenv/lib/python3.8/site-packages (from traitlets>=4.2->IPython->line_profiler) (1.13.0)
+  Requirement already satisfied: ptyprocess>=0.5 in /home/garrido/Workdir/CMB/development/PSpipe/pyenv/lib/python3.8/site-packages (from pexpect; sys_platform != "win32"->IPython->line_profiler) (0.6.0)
+  Requirement already satisfied: wcwidth in /home/garrido/Workdir/CMB/development/PSpipe/pyenv/lib/python3.8/site-packages (from prompt-toolkit!=3.0.0,!=3.0.1,<3.1.0,>=2.0.0->IPython->line_profiler) (0.1.8)
+  Requirement already satisfied: parso>=0.5.2 in /home/garrido/Workdir/CMB/development/PSpipe/pyenv/lib/python3.8/site-packages (from jedi>=0.10->IPython->line_profiler) (0.5.2)
+  Installing collected packages: line-profiler
+  Successfully installed line-profiler-3.0.2
+  Note: you may need to restart the kernel to use updated packages.
+#+end_example
+and we load the extension within this notebook
+#+BEGIN_SRC jupyter-python :results none
+  %load_ext line_profiler
+#+END_SRC
+
+We finally use the =%lprun= command to do a line-by-line profiling
+#+BEGIN_SRC jupyter-python
+  %lprun -T /tmp/pspy_prof -f run_pspy run_pspy()
+  print(open("/tmp/pspy_prof", "r").read())
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+
+  ,*** Profile printout saved to text file '/tmp/pspy_prof'. 
+  Timer unit: 1e-06 s
+
+  Total time: 21.6455 s
+  File: <ipython-input-27-e9277622e3ac>
+  Function: run_pspy at line 1
+
+  Line #      Hits         Time  Per Hit   % Time  Line Contents
+  ==============================================================
+       1                                           def run_pspy():
+       2         1          3.0      3.0      0.0    lmax = 3 * nside -1
+       3         1          2.0      2.0      0.0    binning_file = output_dir + "/binning.dat"
+       4         1       1258.0   1258.0      0.0    pspy_utils.create_binning_file(bin_size=40, n_bins=100, file_name=binning_file)
+       5         2   15605032.0 7802516.0     72.1    mbb_inv, Bbl = so_mcm.mcm_and_bbl_spin0and2(window,
+       6         1          1.0      1.0      0.0                                                binning_file,
+       7         1          1.0      1.0      0.0                                                lmax=lmax,
+       8         1          0.0      0.0      0.0                                                type="Cl",
+       9         1          1.0      1.0      0.0                                                niter=niter)
+      10         1    5933899.0 5933899.0     27.4    alms = sph_tools.get_alms(cmb, window, niter=niter, lmax=lmax)
+      11         1      82650.0  82650.0      0.4    ell, ps = so_spectra.get_spectra(alms, spectra=spectra)
+      12         2      22637.0  11318.5      0.1    lb_pspy, Clb_pspy = so_spectra.bin_spectra(ell,
+      13         1          1.0      1.0      0.0                                               ps,
+      14         1          1.0      1.0      0.0                                               binning_file,
+      15         1          1.0      1.0      0.0                                               lmax,
+      16         1          0.0      0.0      0.0                                               type="Cl",
+      17         1          1.0      1.0      0.0                                               mbb_inv=mbb_inv,
+      18         1          0.0      0.0      0.0                                               spectra=spectra)
+#+end_example
+
+#+BEGIN_SRC jupyter-python
+  %lprun -T /tmp/namaster_prof -f run_namaster run_namaster()
+  print(open("/tmp/namaster_prof", "r").read())
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+
+  ,*** Profile printout saved to text file '/tmp/namaster_prof'. 
+  Timer unit: 1e-06 s
+
+  Total time: 43.4216 s
+  File: <ipython-input-27-e9277622e3ac>
+  Function: run_namaster at line 20
+
+  Line #      Hits         Time  Per Hit   % Time  Line Contents
+  ==============================================================
+      20                                           def run_namaster():
+      21         1          6.0      6.0      0.0    nlb = 40
+      22         1        269.0    269.0      0.0    b = nmt.NmtBin(nside, nlb=nlb)
+      23         1         77.0     77.0      0.0    lb_namaster = b.get_effective_ells()
+      24         1         20.0     20.0      0.0    wsp = nmt.NmtWorkspace()
+      25         2   43273662.0 21636831.0     99.7    wsp.compute_coupling_matrix(field_0, field_2, b, is_teb=True,
+      26         1          3.0      3.0      0.0                                n_iter=niter, lmax_mask=lmax)
+      27         1      20272.0  20272.0      0.0    cl_coupled_00 = nmt.compute_coupled_cell(field_0, field_0)
+      28         1      43132.0  43132.0      0.1    cl_coupled_02 = nmt.compute_coupled_cell(field_0, field_2)
+      29         1      83726.0  83726.0      0.2    cl_coupled_22 = nmt.compute_coupled_cell(field_2, field_2)
+      30         2         46.0     23.0      0.0    cls_coupled = np.array([cl_coupled_00[0],  # TT
+      31         1          1.0      1.0      0.0                            cl_coupled_02[0],  # TE
+      32         1          0.0      0.0      0.0                            cl_coupled_02[1],  # TB
+      33         1          1.0      1.0      0.0                            cl_coupled_22[0],  # EE
+      34         1          1.0      1.0      0.0                            cl_coupled_22[1],  # EB
+      35         1          1.0      1.0      0.0                            cl_coupled_22[2],  # BE
+      36         1          1.0      1.0      0.0                            cl_coupled_22[3]])  # BB
+      37         1        388.0    388.0      0.0    cls_uncoupled = wsp.decouple_cell(cls_coupled)
+      38         2          9.0      4.5      0.0    Clb_namaster = {k: cls_coupled[i] 
+      39         1          2.0      2.0      0.0                    for i, k in enumerate(["TT", "TE", "TB", "EE", "EB", "BE", "BB"])}
+      40         1          1.0      1.0      0.0    Clb_namaster["ET"] = Clb_namaster["TE"]
+      41         1          1.0      1.0      0.0    Clb_namaster["BT"] = Clb_namaster["TB"]
+#+end_example

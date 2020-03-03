@@ -25,9 +25,9 @@ Print versions used
 #+END_SRC
 
 #+RESULTS:
-:      Numpy : 1.17.4
-: Matplotlib : 3.1.2
-:    GetDist : 1.0.3
+:      Numpy : 1.18.1
+: Matplotlib : 3.1.3
+:    GetDist : 1.1.0
 
 * Definitions
 Define CMB & nuisance parameter names.
@@ -59,10 +59,10 @@ Define CMB & nuisance parameter names.
 Let's plot the chains size for all the simulations
 #+BEGIN_SRC jupyter-python
   import glob
-  nsim = 3
+  nsim = 120
   nchains = {i: [] for i in range(nsim)}
   for i in range(nsim):
-      chain_dir_tmpl = "./data/so_likelihood_norm/sim_{}/mcmc.?.txt"
+      chain_dir_tmpl = "./data/so_likelihood_sacc/sim_{}/mcmc.?.txt"
       files = sorted(glob.glob(chain_dir_tmpl.format(i)))
       nchains[i] += [sum(1 for line in open(f)) for f in files]
       nchains[i] += [sum(nchains[i])]
@@ -74,11 +74,131 @@ Let's plot the chains size for all the simulations
 #+END_SRC
 
 #+RESULTS:
-: |   Sim. |   mcmc 1 |   mcmc 2 |   mcmc 3 |   mcmc 4 |   total |
-: |--------+----------+----------+----------+----------+---------|
-: |      0 |    12341 |    12761 |    14901 |    11621 |   51624 |
-: |      1 |    14741 |    14261 |    11401 |    16621 |   57024 |
-: |      2 |    12401 |     9001 |    12341 |     9221 |   42964 |
+#+begin_example
+  |   Sim. |   mcmc 1 |   mcmc 2 |   mcmc 3 |   mcmc 4 |   total |
+  |--------+----------+----------+----------+----------+---------|
+  |      0 |      401 |      461 |      421 |      441 |    1724 |
+  |      1 |    15841 |    18781 |    16921 |    19261 |   70804 |
+  |      2 |    17901 |    19821 |    18041 |    14001 |   69764 |
+  |      3 |    12361 |    20321 |    13921 |    18861 |   65464 |
+  |      4 |    15741 |    19081 |    19981 |    21941 |   76744 |
+  |      5 |    15841 |    18781 |    21541 |    17601 |   73764 |
+  |      6 |    21441 |    18381 |    21461 |    20821 |   82104 |
+  |      7 |    20301 |    14861 |    20081 |    19141 |   74384 |
+  |      8 |    16321 |    19401 |    22001 |    18221 |   75944 |
+  |      9 |    17841 |    20301 |    19781 |    20481 |   78404 |
+  |     10 |    20301 |    20541 |    19841 |    16761 |   77444 |
+  |     11 |    20761 |    15041 |    15541 |    18181 |   69524 |
+  |     12 |    21001 |    21041 |    18581 |    20881 |   81504 |
+  |     13 |    14201 |    18481 |    16361 |    17441 |   66484 |
+  |     14 |    18581 |    17641 |    20221 |    20421 |   76864 |
+  |     15 |    22101 |    18221 |    18081 |     8141 |   66544 |
+  |     16 |    19821 |    19121 |    20341 |    18961 |   78244 |
+  |     17 |    20401 |    20801 |    21261 |    20721 |   83184 |
+  |     18 |    21641 |    20841 |    18461 |    18521 |   79464 |
+  |     19 |    15301 |    19561 |    20181 |    19601 |   74644 |
+  |     20 |    20961 |    20881 |    20701 |    19901 |   82444 |
+  |     21 |    18581 |    18241 |    15921 |    15421 |   68164 |
+  |     22 |    18801 |    20221 |    18441 |    21681 |   79144 |
+  |     23 |    21221 |    18021 |    18521 |    19481 |   77244 |
+  |     24 |    20401 |    19341 |    16941 |    18921 |   75604 |
+  |     25 |    20821 |    16041 |    18781 |    19941 |   75584 |
+  |     26 |    18301 |    20421 |    15941 |    18661 |   73324 |
+  |     27 |    21301 |    13881 |    15641 |    21221 |   72044 |
+  |     28 |    19541 |    18121 |    18621 |    18401 |   74684 |
+  |     29 |    17401 |    19741 |    21301 |    19521 |   77964 |
+  |     30 |    21041 |    20921 |    18841 |    19821 |   80624 |
+  |     31 |    20021 |    19261 |    20261 |    17741 |   77284 |
+  |     32 |    15101 |    16721 |    20721 |    17821 |   70364 |
+  |     33 |    18881 |    21401 |    16721 |    17781 |   74784 |
+  |     34 |    18961 |    20601 |    19281 |    17561 |   76404 |
+  |     35 |    20621 |    19301 |    18981 |    18721 |   77624 |
+  |     36 |    17821 |    18641 |    20441 |    18341 |   75244 |
+  |     37 |    18941 |    17081 |    15701 |    19821 |   71544 |
+  |     38 |    13441 |    18601 |    16201 |    18401 |   66644 |
+  |     39 |    19621 |    18241 |    20881 |    21701 |   80444 |
+  |     40 |    17621 |    22041 |    19461 |    17601 |   76724 |
+  |     41 |    19661 |    18121 |    19101 |    20021 |   76904 |
+  |     42 |    16401 |    17741 |    18201 |    20661 |   73004 |
+  |     43 |    19281 |    15761 |    18621 |    17321 |   70984 |
+  |     44 |    15621 |    18641 |    19741 |    18101 |   72104 |
+  |     45 |    18561 |    18021 |    14721 |    18481 |   69784 |
+  |     46 |    17321 |    18181 |    21301 |    19361 |   76164 |
+  |     47 |    18321 |    18381 |    19121 |    16561 |   72384 |
+  |     48 |    16001 |    18521 |    14381 |    18621 |   67524 |
+  |     49 |    20581 |    18341 |    20141 |    17901 |   76964 |
+  |     50 |    21261 |    19201 |    18721 |    18241 |   77424 |
+  |     51 |    19961 |    20721 |    18421 |    19521 |   78624 |
+  |     52 |    18821 |    20321 |    18561 |    20861 |   78564 |
+  |     53 |    18641 |    13181 |    17801 |    20441 |   70064 |
+  |     54 |    21261 |    19901 |    17401 |    17441 |   76004 |
+  |     55 |    17461 |    18481 |    19001 |    16021 |   70964 |
+  |     56 |    18081 |    20181 |    17781 |    20901 |   76944 |
+  |     57 |    20941 |    18221 |    20361 |    18301 |   77824 |
+  |     58 |    18221 |    15281 |    19281 |    17021 |   69804 |
+  |     59 |    18541 |    20501 |    18761 |    19101 |   76904 |
+  |     60 |    18241 |    18541 |    19541 |    16301 |   72624 |
+  |     61 |    14501 |    20141 |    16561 |    18141 |   69344 |
+  |     62 |     8321 |    19801 |    15421 |    20181 |   63724 |
+  |     63 |    19281 |    18281 |    18681 |    19201 |   75444 |
+  |     64 |    18321 |    20141 |    17961 |    19141 |   75564 |
+  |     65 |    20721 |    21021 |    15481 |    20061 |   77284 |
+  |     66 |    19241 |    17261 |    18521 |    16181 |   71204 |
+  |     67 |    19401 |    20441 |    18961 |    19241 |   78044 |
+  |     68 |    20301 |    19921 |    17601 |    14561 |   72384 |
+  |     69 |    18421 |    15181 |    19661 |    15661 |   68924 |
+  |     70 |    20221 |    17081 |    17981 |    18121 |   73404 |
+  |     71 |    20181 |    15361 |    17341 |    16621 |   69504 |
+  |     72 |    16041 |    20241 |    19381 |    20621 |   76284 |
+  |     73 |    18441 |    20141 |    19301 |    20641 |   78524 |
+  |     74 |    17441 |    17561 |    20021 |    18821 |   73844 |
+  |     75 |    17501 |    17781 |    18881 |    22061 |   76224 |
+  |     76 |    15761 |    16361 |    18981 |    18961 |   70064 |
+  |     77 |    15261 |    19301 |    21121 |    18541 |   74224 |
+  |     78 |    17421 |    19041 |    17861 |    20441 |   74764 |
+  |     79 |    21041 |    18481 |    18261 |    17481 |   75264 |
+  |     80 |    17941 |    18581 |    18181 |    16381 |   71084 |
+  |     81 |    20041 |    17801 |    19601 |    20941 |   78384 |
+  |     82 |    17241 |    20581 |    18781 |    17821 |   74424 |
+  |     83 |    19221 |    21121 |    19141 |    18041 |   77524 |
+  |     84 |    18441 |    15261 |    15081 |    20541 |   69324 |
+  |     85 |    18401 |    15521 |    12801 |    15241 |   61964 |
+  |     86 |    16221 |    16981 |    21381 |    18681 |   73264 |
+  |     87 |    18901 |    20841 |    18561 |    17061 |   75364 |
+  |     88 |    17821 |    19961 |    18021 |    18861 |   74664 |
+  |     89 |    20781 |    21261 |    18881 |    18521 |   79444 |
+  |     90 |    17221 |     6141 |    12981 |    21081 |   57424 |
+  |     91 |    18981 |    18621 |    20701 |    20401 |   78704 |
+  |     92 |    19621 |    17561 |    18961 |    19541 |   75684 |
+  |     93 |    18961 |    20181 |     5861 |    19421 |   64424 |
+  |     94 |    15281 |    21801 |    20181 |    17681 |   74944 |
+  |     95 |    19101 |    18481 |    20961 |    19101 |   77644 |
+  |     96 |    16401 |    18181 |    18561 |    17801 |   70944 |
+  |     97 |    17921 |    22001 |    17021 |    20001 |   76944 |
+  |     98 |    18381 |    20241 |    18881 |    16981 |   74484 |
+  |     99 |    19061 |    16841 |    19521 |    19721 |   75144 |
+  |    100 |    16141 |    20461 |    17841 |    19421 |   73864 |
+  |    101 |    18341 |    20121 |    18681 |    21001 |   78144 |
+  |    102 |    19121 |    20601 |    17421 |    19461 |   76604 |
+  |    103 |    19941 |    22821 |    21301 |    19541 |   83604 |
+  |    104 |    18221 |    18361 |    20421 |    20101 |   77104 |
+  |    105 |    16841 |    17341 |    20301 |    16761 |   71244 |
+  |    106 |    15281 |    18521 |    16501 |    16221 |   66524 |
+  |    107 |    16521 |    16881 |    16941 |    13281 |   63624 |
+  |    108 |    15341 |    16041 |    11141 |    13501 |   56024 |
+  |    109 |    13101 |    15061 |     9541 |    16481 |   54184 |
+  |    110 |    12021 |    14341 |    11241 |    13061 |   50664 |
+  |    111 |    14021 |    15541 |    16141 |    13661 |   59364 |
+  |    112 |    16441 |    16781 |    17181 |    14121 |   64524 |
+  |    113 |    12661 |    13041 |    12521 |     7741 |   45964 |
+  |    114 |    13261 |    15661 |    13981 |    14081 |   56984 |
+  |    115 |    13921 |    11781 |    13841 |    16001 |   55544 |
+  |    116 |     5021 |    13521 |    13561 |    12781 |   44884 |
+  |    117 |    13501 |    14001 |    12241 |    14201 |   53944 |
+  |    118 |    13601 |    13701 |    14401 |    12941 |   54644 |
+  |    119 |    12001 |    10021 |    14981 |    13381 |   50384 |
+#+end_example
+
 
 Have a look at how chains evolve with time and check convergence or not.
 #+BEGIN_SRC jupyter-python :results none
@@ -110,17 +230,27 @@ Have a look at how chains evolve with time and check convergence or not.
 
 Plot chains for the CMB & nuisance parameters given a simulation id (up to 100)
 #+BEGIN_SRC jupyter-python
-  sim_id = 2
-  chains = "./data/so_likelihood_norm/sim_{}/mcmc".format(sim_id)
-  plot_chains(chains, params=cosmo_params+nuisance_params, ncol=4)
+  # plot_chains(chains, params=cosmo_params+nuisance_params, ncol=4)
+  sim_id = 0
+  chains = "./data/so_likelihood_sacc/sim_tt_{}/mcmc".format(sim_id)
+  plot_chains(chains, params=cosmo_params, ncol=4)
+  chains = "./data/so_likelihood_sacc/sim_ttteee_{}/mcmc".format(sim_id)
+  # plot_chains(chains, params=cosmo_params+nuisance_params, ncol=4)
+  plot_chains(chains, params=cosmo_params, ncol=4)
 #+END_SRC
 
 #+RESULTS:
 :RESULTS:
-: WARNING:root:outlier fraction 0.00016129032258064516
-: WARNING:root:outlier fraction 0.00032414910858995135
-: WARNING:root:outlier fraction 0.00010845986984815618
-[[file:./.ob-jupyter/6753aafc523c9b8d2397018fab4952277c4b144a.png]]
+: WARNING:root:outlier fraction 0.008256880733944955
+: WARNING:root:outlier fraction 0.008189655172413794
+: WARNING:root:outlier fraction 0.0034201954397394137
+: WARNING:root:outlier fraction 0.00072992700729927
+: WARNING:root:outlier fraction 0.0032012195121951218
+: WARNING:root:outlier fraction 0.01949685534591195
+: WARNING:root:outlier fraction 0.0032640949554896144
+: WARNING:root:outlier fraction 0.008189655172413794
+[[file:./.ob-jupyter/dadebafd824f15c824c96112b08174e9ed5be6d3.png]]
+[[file:./.ob-jupyter/0fc94f8483211e2e5b937c45f140d46133d034fb.png]]
 :END:
 
 * MCMC distributions
@@ -135,14 +265,14 @@ Plot chains for the CMB & nuisance parameters given a simulation id (up to 100)
       "Alens": 1.0,
       "tau": 0.0544,
       "H0": 67.36,
-      "a_tSZ": 3.3044404448917724,
-      "a_kSZ": 1.6646620740058649,
-      "a_p": 6.912474322461401,
-      "beta_p": 2.077474196171309,
-      "a_c": 4.88617700670901,
-      "beta_c": 2.2030316332596014,
+      "a_tSZ": 3.30,
+      "a_kSZ": 1.60,
+      "a_p": 6.90,
+      "beta_p": 2.08,
+      "a_c": 4.90,
+      "beta_c": 2.20,
       "n_CIBC": 1.20,
-      "a_s": 3.099214100532393,
+      "a_s": 3.10,
       "T_d": 9.60
   }
 #+END_SRC
@@ -224,8 +354,8 @@ Function to plot all the KDE distributions of parameters
 Load the different samples
 #+BEGIN_SRC jupyter-python :results none
   from getdist import loadMCSamples
-  samples = [loadMCSamples("./data/so_likelihood_new/sim_{}/mcmc".format(sim_id),
-                           settings={"ignore_rows": 0.4}) for sim_id in range(100)]
+  samples = [loadMCSamples("./data/so_likelihood_sacc/sim_{}/mcmc".format(sim_id),
+                           settings={"ignore_rows": 0.4}) for sim_id in range(1, 120)]
 #+END_SRC
 
 ** CMB parameters
@@ -234,7 +364,7 @@ Load the different samples
 #+END_SRC
 
 #+RESULTS:
-[[file:./.ob-jupyter/36df3dc8f0bcffbd240b079c344f884fb99abec8.png]]
+[[file:./.ob-jupyter/942e33f71d7a12ae3cde408ab4ce5a067dfd44df.png]]
 
 
 #+BEGIN_SRC jupyter-python
@@ -242,8 +372,7 @@ Load the different samples
 #+END_SRC
 
 #+RESULTS:
-[[file:./.ob-jupyter/dd99f15e1aba68485f5bda2a14318bdaa841ea7d.png]]
-
+[[file:./.ob-jupyter/31dbb8ae6a3f21fb03934cde4e9fcdda3ecba7f0.png]]
 
 ** Nuisance parameters
 #+BEGIN_SRC jupyter-python
@@ -251,7 +380,7 @@ Load the different samples
 #+END_SRC
 
 #+RESULTS:
-[[file:./.ob-jupyter/f3ea2c91b57663870c894dad9cb33cc7963fe82e.png]]
+[[file:./.ob-jupyter/4a77048d208611e854895958d47103e818afcfa5.png]]
 
 
 #+BEGIN_SRC jupyter-python
@@ -259,8 +388,70 @@ Load the different samples
 #+END_SRC
 
 #+RESULTS:
-[[file:./.ob-jupyter/db8ee042d0b3b7530386fb00b21443bb892c1c1a.png]]
+[[file:./.ob-jupyter/93add252acf12e60183b6c111515b9e711281706.png]]
 * Miscellaneous
+** Triangle plot
+Define global plot settings
+#+BEGIN_SRC jupyter-python :results none
+  from getdist.plots import GetDistPlotSettings
+  plot_settings = GetDistPlotSettings()
+  plot_settings.num_plot_contours = 3
+  plot_settings.solid_colors = "tab10"
+  plot_settings.line_styles = "tab10"
+  plot_settings.legend_fontsize = 15
+  plot_settings.solid_colors = ["C3", "C0", "C1", "C2"]
+  plot_settings.line_styles = plot_settings.solid_colors
+#+END_SRC
+
+Show input values
+#+BEGIN_SRC jupyter-python :results none
+  def show_input(g, params):
+      for i, p in enumerate(params):
+          x = inputs.get(p, np.nan)
+          kwargs = dict(color="gray", ls="--", lw=1)
+          for ax in g.subplots[:,i]:
+              if ax: ax.axvline(x, **kwargs)
+          for ax in g.subplots[i,:i]:
+              if ax: ax.axhline(x, **kwargs)
+#+END_SRC
+
+Load MCMC samples
+#+BEGIN_SRC jupyter-python :results none
+  sim_id = 0
+  samples = [loadMCSamples("./data/so_likelihood_sacc/sim_{}_{}/mcmc".format(spec, sim_id),
+                           settings={"ignore_rows": 0.4}) for spec in ["tt", "ee", "te", "ttteee"]]
+#+END_SRC
+
+Plot posteriors distributions
+#+BEGIN_SRC jupyter-python
+  from getdist import plots
+  g = plots.get_subplot_plotter(settings=plot_settings)
+  g.triangle_plot(samples, cosmo_params, filled=True, legend_labels=["TT", "EE", "TE", "TT, TE, EE"])
+  # g.add_legend(["TT, TE, EE", "TT", "EE", "TE"],
+  #              colored_text=False, figure=True, align_right=True)
+  # Show input value
+  show_input(g, cosmo_params)
+  # Show prior on tau
+  ax = g.subplots[-1, -1]
+  xmin, xmax, ymin, ymax = ax.axis()
+  x = np.linspace(xmin, xmax, 100)
+q  from scipy.stats import norm
+  ax.plot(x, 0.018*norm.pdf(x, 0.054, 0.0073), color="gray", ls="--", label=r"$\tau$ prior")
+  ax.legend(loc="upper left", bbox_to_anchor=(1,1));
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/da8f9827d5e63cce90a9eed73417bd5dfd670a6f.png]]
+
+** Correlation plot
+
+#+BEGIN_SRC jupyter-python
+  g.rectangle_plot(cosmo_params, nuisance_params, roots=samples, filled=True);
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/2a6922f9686cda224b4bbf0145a09220b2615048.png]]
+
 ** Write Cls to file
 :PROPERTIES:
 :HEADER-ARGS: :tangle write_input_cls.py

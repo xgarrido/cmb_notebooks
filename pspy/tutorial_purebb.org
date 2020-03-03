@@ -1,0 +1,330 @@
+#+TITLE: Tutorial on generation of spectra for standard and pure B modes
+#+PROPERTY: header-args:jupyter-python :session tutorial_purebb
+#+PROPERTY: header-args :exports both
+#+PROPERTY: header-args :tangle tutorial_purebb.py
+
+* Introduction
+
+This tutorial illustrates the spectra computation for standard and pure B modes. We will only use
+the =HEALPIX= pixellisation to pass through the different steps of generation.
+
+The =HEALPIX= survey mask is a disk centered on longitude 30° and latitude 50° with a radius of 25
+radians. The =nside= value is set to 512 for this tutorial to reduce computation time.
+
+* Emacs config                                                     :noexport:
+
+#+BEGIN_SRC elisp :session tutorial_purebb :results none :tangle no
+  (setenv "WORKON_HOME" (concat (getenv "HOME") "/Workdir/CMB/development/pspy"))
+  (pyvenv-workon "pyenv")
+#+END_SRC
+
+* Preamble
+=matplotlib= magic
+#+BEGIN_SRC jupyter-python :results none :tangle no
+  %matplotlib inline
+#+END_SRC
+
+Versions used for this tutorial
+#+BEGIN_SRC jupyter-python
+  import numpy as np
+  import matplotlib as mpl
+  import matplotlib.pyplot as plt
+  import healpy as hp
+  import pspy
+  print("     Numpy :", np.__version__)
+  print("Matplotlib :", mpl.__version__)
+  print("    healpy :", hp.__version__)
+  print("      pspy :", pspy.__version__)
+#+END_SRC
+
+#+RESULTS:
+:      Numpy : 1.18.0
+: Matplotlib : 3.1.2
+:     healpy : 1.13.0
+:       pspy : 1.2.0+2.g6b567f5
+
+Get default data dir from =pspy= and set Planck colormap as default
+#+BEGIN_SRC jupyter-python :results none
+  from pixell import colorize
+  colorize.mpl_setdefault("planck")
+#+END_SRC
+
+* Generation of the templates, mask and apodisation type
+
+We start by specifying the =HEALPIX= survey parameters namely longitude, latitude and patch size. The
+=nside= value is set to 512.
+#+BEGIN_SRC jupyter-python :results none
+  lon, lat = 30, 50
+  radius = 25
+  nside = 512
+#+END_SRC
+
+Given the =nside= value, we can set the \(\ell\)_{max} value
+#+BEGIN_SRC jupyter-python :results none
+  lmax = 3 * nside - 1
+#+END_SRC
+
+For this example, we will make use of 3 components : Temperature (spin 0) and polarisation Q and U
+(spin 2)
+#+BEGIN_SRC jupyter-python :results none
+  ncomp = 3
+#+END_SRC
+
+Given the parameters, we can generate the =HEALPIX= template as follow
+#+BEGIN_SRC jupyter-python :results none
+  from pspy import so_map
+  template = so_map.healpix_template(ncomp, nside)
+#+END_SRC
+
+We also define the binary template for the window function pixels
+#+BEGIN_SRC jupyter-python :results none
+  binary = so_map.healpix_template(ncomp=1, nside=nside)
+  vec = hp.pixelfunc.ang2vec(lon, lat, lonlat=True)
+  disc = hp.query_disc(nside, vec, radius=radius*np.pi/180)
+  binary.data[disc] = 1
+#+END_SRC
+
+* Generation of spectra
+** Generate window
+We then create an apodisation for the survey mask. We use a C1 apodisation with an apodisation size
+of 5 degrees
+#+BEGIN_SRC jupyter-python
+  from pspy import so_window
+  window = so_window.create_apodization(binary, apo_type="C1", apo_radius_degree=5)
+  hp.mollview(window.data, title=None)
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/c8c642c60f707969a94fdc0cbd3b36f01c3b3b48.png]]
+
+
+#+BEGIN_SRC jupyter-python
+  niter = 3
+  w1_plus, w1_minus, w2_plus, w2_minus = so_window.get_spinned_windows(window, lmax=lmax, niter=niter)
+  plt.figure(figsize=(8, 8))
+  kwargs = {"rot": (lon, lat, 0), "xsize": 3500, "reso": 1, "title": None}
+  hp.gnomview(w1_plus.data, **kwargs, sub=(2, 2, 1))
+  hp.gnomview(w1_minus.data, **kwargs, sub=(2, 2, 2))
+  hp.gnomview(w2_plus.data, **kwargs, sub=(2, 2, 3))
+  hp.gnomview(w2_minus.data, **kwargs, sub=(2, 2, 4))
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/9098ac2277fbc6b5c7537aaff426e1b83c011190.png]]
+
+** Binning file
+We create a binning file with the following format : lmin, lmax, lmean
+#+BEGIN_SRC jupyter-python :results none
+  import os
+  output_dir = "/tmp/tutorial_purebb"
+  os.makedirs(output_dir, exist_ok=True)
+  binning_file = os.path.join(output_dir, "binning.dat")
+  from pspy import pspy_utils
+  pspy_utils.create_binning_file(bin_size=50, n_bins=300, file_name=binning_file)
+#+END_SRC
+
+** Compute mode coupling matrix
+For spin 0 and 2 the window need to be a tuple made of two objects: the window used for spin 0 and the
+one used for spin 2
+#+BEGIN_SRC jupyter-python :results none
+  window_tuple = (window, window)
+#+END_SRC
+
+The windows (for =spin0= and =spin2=) are going to couple mode together, we compute a mode coupling
+matrix in order to undo this effect given the binning file. We do it for both calculations /i.e./
+standard and pure B mode
+#+BEGIN_SRC jupyter-python
+  from pspy import so_mcm
+  print("computing standard mode coupling matrix")
+  mbb_inv, Bbl = so_mcm.mcm_and_bbl_spin0and2(window_tuple,
+                                              binning_file,
+                                              lmax=lmax,
+                                              niter=niter,
+                                              type="Cl")
+
+  print("computing pure mode coupling matrix")
+  mbb_inv_pure, Bbl_pure = so_mcm.mcm_and_bbl_spin0and2(window_tuple,
+                                                        binning_file,
+                                                        lmax=lmax,
+                                                        niter=niter,
+                                                        type="Cl",
+                                                        pure=True)
+#+END_SRC
+
+#+RESULTS:
+: computing standard mode coupling matrix
+: computing pure mode coupling matrix
+
+** Generation of ΛCDM power spectra
+We first have to compute $C_\ell$ data using a cosmology code such as [[https://camb.readthedocs.io/en/latest/][CAMB]] and we need to install it
+since this is not a prerequisite of =pspy=. We can do it within this notebook by executing the
+following command
+#+BEGIN_SRC jupyter-python
+  %pip install -U camb
+#+END_SRC
+
+#+RESULTS:
+: Requirement already up-to-date: camb in /home/garrido/Workdir/CMB/development/PSpipe/pyenv/lib/python3.8/site-packages (1.1.0)
+: Requirement already satisfied, skipping upgrade: scipy>=1.0 in /home/garrido/Workdir/CMB/development/PSpipe/pyenv/lib/python3.8/site-packages (from camb) (1.3.3)
+: Requirement already satisfied, skipping upgrade: six in /home/garrido/Workdir/CMB/development/PSpipe/pyenv/lib/python3.8/site-packages (from camb) (1.13.0)
+: Requirement already satisfied, skipping upgrade: sympy>=1.0 in /home/garrido/Workdir/CMB/development/PSpipe/pyenv/lib/python3.8/site-packages (from camb) (1.5.1)
+: Requirement already satisfied, skipping upgrade: numpy>=1.13.3 in /home/garrido/Workdir/CMB/development/PSpipe/pyenv/lib/python3.8/site-packages (from scipy>=1.0->camb) (1.18.1)
+: Requirement already satisfied, skipping upgrade: mpmath>=0.19 in /home/garrido/Workdir/CMB/development/PSpipe/pyenv/lib/python3.8/site-packages (from sympy>=1.0->camb) (1.1.0)
+: Note: you may need to restart the kernel to use updated packages.
+
+To make sure everything goes well, we can import =CAMB= and check its version
+#+BEGIN_SRC jupyter-python
+  import camb
+  print("CAMB version:", camb.__version__)
+#+END_SRC
+
+#+RESULTS:
+: CAMB version: 1.1.0
+
+Now that =CAMB= is properly installed, we will produce $C_\ell$ data from \(\ell\)_{min}=2 to
+\(\ell\)_{max}=10^{4} for the following set of \(\Lambda\)CDM parameters
+#+BEGIN_SRC jupyter-python :results none
+  ellmin, ellmax = 2, 10**4
+  ell = np.arange(ellmin, ellmax)
+  cosmo_params = {
+      "H0": 67.5,
+      "As": 1e-10*np.exp(3.044),
+      "ombh2": 0.02237,
+      "omch2": 0.1200,
+      "ns": 0.9649,
+      "Alens": 1.0,
+      "tau": 0.0544
+  }
+  pars = camb.set_params(**cosmo_params)
+  pars.set_for_lmax(ellmax, lens_potential_accuracy=1)
+  results = camb.get_results(pars)
+  powers = results.get_cmb_power_spectra(pars, CMB_unit="muK")
+#+END_SRC
+
+We finally have to write $C_\ell$ into a file to feed the =so_map.synfast= function for both
+pixellisation templates
+#+BEGIN_SRC jupyter-python :results none
+  cl_file = os.path.join(output_dir, "cl_camb.dat")
+  np.savetxt(cl_file,
+             np.hstack([l[:, np.newaxis], powers["total"][lmin:lmax]]))
+#+END_SRC
+
+* Running simulations
+Given the parameters and data above, we will now simulate =n_sims= simulation to check for mean and
+variance of BB spectrum. We will do it for both calculations (standard and pure) and finally we will
+graphically compare results
+
+We first need to specify the order of the spectra to be used by =pspy= although only BB spectrum will
+be used
+#+BEGIN_SRC jupyter-python :results none
+  spectra = ["TT", "TE", "TB", "ET", "BT", "EE", "EB", "BE", "BB"]
+#+END_SRC
+
+and we define a dictionnary of methods regarding the calculation type for B mode spectrum
+#+BEGIN_SRC jupyter-python :results none
+  from pspy import sph_tools
+  methods = {
+      "standard": {"alm" : sph_tools.get_alms, "mbb": mbb_inv, "ps": []},
+      "pure": {"alm": sph_tools.get_pure_alms, "mbb": mbb_inv_pure, "ps": []}
+  }
+#+END_SRC
+
+#+BEGIN_SRC jupyter-python
+  from pspy import so_spectra
+  n_sims = 1
+  for i in range(n_sims):
+    cmb = template.synfast(cl_file)
+    for k, v in methods.items():
+      get_alm = v.get("alm")
+      alm = get_alm(cmb, window_tuple, niter, lmax)
+      ell, ps = so_spectra.get_spectra(alm, spectra=spectra)
+      ellb, ps_dict = so_spectra.bin_spectra(ell,
+                                             ps,
+                                             binning_file,
+                                             lmax,
+                                             type="Cl",
+                                             mbb_inv=v.get("mbb"),
+                                             spectra=spectra)
+      v["ps"] += [ps_dict["BB"]]
+#+END_SRC
+
+
+Let's plot the mean results against the theory value for BB spectrum
+#+BEGIN_SRC jupyter-python
+  for k, v in methods.items():
+      v["mean"] = np.mean(v.get("ps"), axis=0)
+      v["std"] = np.std(v.get("ps"), axis=0)
+
+  from pspy import pspy_utils
+  ell_th, ps_theory = pspy_utils.ps_lensed_theory_to_dict(cl_file, output_type="Cl", lmax=lmax)
+  ps_theory_b = so_mcm.apply_Bbl(Bbl, ps_theory, spectra=spectra)
+  ps_theory_b_pure = so_mcm.apply_Bbl(Bbl_pure, ps_theory, spectra=spectra)
+
+  fac = ellb * (ellb + 1) / (2 * np.pi)
+  facth = ell_th * (ell_th + 1) / (2 * np.pi)
+
+  plt.figure(figsize=(7, 6))
+  plt.plot(ell_th[:lmax], ps_theory["BB"][:lmax] * facth[:lmax], color="grey")
+  plt.errorbar(ellb - 5, ps_theory_b["BB"] * fac, color="tab:red", label="binned theory BB")
+  plt.errorbar(ellb + 5, ps_theory_b_pure["BB"] * fac, color="tab:blue", label="binned theory BB pure")
+  plt.errorbar(ellb - 5, methods.get("standard").get("mean") * fac,
+               methods.get("standard").get("std") * fac, fmt=".", color="tab:red", label="mean BB")
+  plt.errorbar(ellb - 5, methods.get("pure").get("mean") * fac,
+               methods.get("pure").get("std") * fac, fmt=".", color="tab:blue", label="mean BB pure")
+  plt.ylim(-0.07, 0.17)
+  plt.xlim(0, 2 * nside)
+  plt.legend()
+  plt.ylabel(r"$D^{BB}_{\ell}$")
+  plt.xlabel(r"$\ell$")
+
+#+END_SRC
+
+#+RESULTS:
+:RESULTS:
+: Text(0.5, 0, '$\\ell$')
+[[file:./.ob-jupyter/a072c96339fe44c1a7d51b8d50a469f1fd512d56.png]]
+:END:
+
+#+BEGIN_SRC jupyter-python :results none
+  Db_dict = {}
+  from itertools import combinations_with_replacement as cwr
+  for (i1, alm1), (i2, alm2) in cwr(enumerate(alms), 2):
+    from pspy import so_spectra
+    l, ps = so_spectra.get_spectra(alm1, alm2, spectra=spectra)
+    lb, Db = so_spectra.bin_spectra(l,
+                                    ps,
+                                    binning_file,
+                                    lmax,
+                                    type="Dl",
+                                    mbb_inv=mbb_inv,
+                                    spectra=spectra)
+    Db_dict.update({"split{}xsplit{}".format(i1, i2): Db})
+#+END_SRC
+
+To compare with the input $C_\ell$, we also compute the theory spectra and binned spectra
+#+BEGIN_SRC jupyter-python :results none
+  from pspy import pspy_utils
+  l, ps_theory = pspy_utils.ps_lensed_theory_to_dict(cl_file, "Dl", lmax=lmax)
+  ps_theory_b = so_mcm.apply_Bbl(Bbl, ps_theory, spectra=spectra)
+#+END_SRC
+
+and we finally plot all the results
+#+BEGIN_SRC jupyter-python
+  fig, axes = plt.subplots(3, 3, figsize=(15, 12), sharex=True)
+  ax = axes.flatten()
+  for i, spec in enumerate(spectra):
+      for k, v in Db_dict.items():
+          ax[i].plot(lb, v[spec], "-o", label=k)
+      ax[i].plot(lb, ps_theory_b[spec], "o", color="tab:red", label="binned theory")
+      ax[i].plot(l, ps_theory[spec], color="tab:red", label="theory")
+      ax[i].set_ylabel(r'$D^{%s}_{\ell}$'%spec, fontsize=20)
+      if i==0:
+          fig.legend(loc="upper left", bbox_to_anchor=(1,1))
+
+  for ax in axes[-1]:
+      ax.set_xlabel(r'$\ell$',fontsize=20)
+  plt.tight_layout()
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/8dec742a8f48e26f255cf47eb66656185282eea6.png]]

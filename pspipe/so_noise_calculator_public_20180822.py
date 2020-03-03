@@ -1,0 +1,1 @@
+/home/garrido/Workdir/CMB/development/PSpipe/software/notebooks/so_noise_calculator_public_20180822.py

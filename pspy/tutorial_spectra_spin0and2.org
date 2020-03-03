@@ -8,7 +8,7 @@
 This tutorial shows the spectra generation for spin 0 and 2 fields. We will only use the =CAR=
 pixellisation to pass through the different steps of generation. If you are interested on doing the
 same thing with =HEALPIX= pixellisation, you can have a look to the file
-=example_spectra_car_healpix.ipynb=.
+=tutorial_spectra_car_healpix.ipynb=.
 
 The =CAR= survey mask is defined with =ra0, ra1, dec0, dec1= with 1 arcminute resolution. We simulate 2
 splits with 20 µK.arcmin noise and we also include a point source mask with 100 holes of size 10
@@ -24,10 +24,13 @@ with an apodisation of 0.3 degree. We finally compute the spectra between the 2 
 #+END_SRC
 
 * Preamble
+=matplotlib= magic
+#+BEGIN_SRC jupyter-python :results none :tangle no
+  %matplotlib inline
+#+END_SRC
+
 Versions used for this tutorial
 #+BEGIN_SRC jupyter-python
-  %matplotlib inline
-  import os
   import numpy as np
   import matplotlib as mpl
   import matplotlib.pyplot as plt
@@ -35,17 +38,17 @@ Versions used for this tutorial
   print("     Numpy :", np.__version__)
   print("Matplotlib :", mpl.__version__)
   print("    pixell :", pixell.__version__)
-  # print("      pspy :", pspy.__version__)
+  print("      pspy :", pspy.__version__)
 #+END_SRC
 
 #+RESULTS:
-:      Numpy : 1.17.4
+:      Numpy : 1.18.0
 : Matplotlib : 3.1.2
 :     pixell : 0.6.0+34.g23be32d
+:       pspy : 0+untagged.88.g1ef44db
 
 Get default data dir from =pspy= and set Planck colormap as default
 #+BEGIN_SRC jupyter-python :results none
-  from pspy.so_config import DEFAULT_DATA_DIR
   pixell.colorize.mpl_setdefault("planck")
 #+END_SRC
 
@@ -80,15 +83,69 @@ at 1 and at the border to be zero
 
 * Generation of spectra
 ** Generation of simulations
-We first generate a CMB realisation from an already computed =CAMB= file
+We first have to compute $C_\ell$ data using a cosmology code such as [[https://camb.readthedocs.io/en/latest/][CAMB]] and we need to install it
+since this is not a prerequisite of =pspy=. We can do it within this notebook by executing the
+following command
+#+BEGIN_SRC jupyter-python
+  %pip install camb
+#+END_SRC
+
+#+RESULTS:
+: Requirement already satisfied: camb in /home/garrido/Workdir/CMB/development/pspy/pyenv/lib/python3.8/site-packages (1.1.0)
+: Requirement already satisfied: scipy>=1.0 in /home/garrido/Workdir/CMB/development/pspy/pyenv/lib/python3.8/site-packages (from camb) (1.4.1)
+: Requirement already satisfied: six in /home/garrido/Workdir/CMB/development/pspy/pyenv/lib/python3.8/site-packages (from camb) (1.13.0)
+: Requirement already satisfied: sympy>=1.0 in /home/garrido/Workdir/CMB/development/pspy/pyenv/lib/python3.8/site-packages (from camb) (1.5)
+: Requirement already satisfied: numpy>=1.13.3 in /home/garrido/Workdir/CMB/development/pspy/pyenv/lib/python3.8/site-packages (from scipy>=1.0->camb) (1.18.0)
+: Requirement already satisfied: mpmath>=0.19 in /home/garrido/Workdir/CMB/development/pspy/pyenv/lib/python3.8/site-packages (from sympy>=1.0->camb) (1.1.0)
+: Note: you may need to restart the kernel to use updated packages.
+
+To make sure everything goes well, we can import =CAMB= and check its version
+#+BEGIN_SRC jupyter-python
+  import camb
+  print("CAMB version:", camb.__version__)
+#+END_SRC
+
+#+RESULTS:
+: CAMB version: 1.1.0
+
+Now that =CAMB= is properly installed, we will produce $C_\ell$ data from \(\ell\)_{min}=2 to
+\(\ell\)_{max}=10^{4} for the following set of \(\Lambda\)CDM parameters
 #+BEGIN_SRC jupyter-python :results none
-  cl_file = os.path.join(DEFAULT_DATA_DIR, "bode_almost_wmap5_lmax_1e4_lensedCls_startAt2.dat")
+  lmin, lmax = 2, 10**4
+  l = np.arange(lmin, lmax)
+  cosmo_params = {
+      "H0": 67.5,
+      "As": 1e-10*np.exp(3.044),
+      "ombh2": 0.02237,
+      "omch2": 0.1200,
+      "ns": 0.9649,
+      "Alens": 1.0,
+      "tau": 0.0544
+  }
+  pars = camb.set_params(**cosmo_params)
+  pars.set_for_lmax(lmax, lens_potential_accuracy=1)
+  results = camb.get_results(pars)
+  powers = results.get_cmb_power_spectra(pars, CMB_unit="muK")
+#+END_SRC
+
+We finally have to write $C_\ell$ into a file to feed the =so_map.synfast= function for both
+pixellisation templates
+#+BEGIN_SRC jupyter-python :results none
+  import os
+  output_dir = "/tmp/tutorial_spectra_spin0and2"
+  os.makedirs(output_dir, exist_ok=True)
+  cl_file = output_dir + "/cl_camb.dat"
+  np.savetxt(cl_file,
+             np.hstack([l[:, np.newaxis], powers["total"][lmin:lmax]]))
+#+END_SRC
+
+Given the =CAMB= file, we generate a CMB realisation
+#+BEGIN_SRC jupyter-python :results none
   cmb = template_car.synfast(cl_file)
 #+END_SRC
 
-Then, we make 2 splits out of it, each with 20 µK.arcmin rms in T and 20xsqrt(2) µK.arcmin in
-polarisation
-
+Then, we make 2 splits out of it, each with 20 µK.arcmin rms in temperature and 20xsqrt(2) µK.arcmin
+in polarisation
 #+BEGIN_SRC jupyter-python :results none
   nsplits = 2
   splits = [cmb.copy() for i in range(nsplits)]
@@ -118,7 +175,7 @@ the color map
 #+END_SRC
 
 #+RESULTS:
-[[file:./.ob-jupyter/0e48d4d665e0e36ee697fc3a9e404c2142b11b72.png]]
+[[file:./.ob-jupyter/586c99fb81a677cd82611a0b6fbc05e9ea19f225.png]]
 
 ** Generate window
 We then apodize the survey mask with a "Rectangle" pattern designed for rectangle maps and with 1
@@ -130,7 +187,7 @@ degree beam
 
 We also create a point source mask made of 100 holes each with a 10 arcminutes size
 #+BEGIN_SRC jupyter-python :results none
-  mask = so_map.simulate_source_mask(binary_car, nholes=100, hole_radius_arcmin=10)
+  mask = so_map.simulate_source_mask(binary_car, n_holes=100, hole_radius_arcmin=10)
 #+END_SRC
 and we apodize it
 #+BEGIN_SRC jupyter-python :results none
@@ -146,8 +203,8 @@ The window is given by the product of the survey window and the mask window
 
 #+RESULTS:
 :RESULTS:
-: <matplotlib.image.AxesImage at 0x7fde65cad160>
-[[file:./.ob-jupyter/8e130431cf9ab1d4e0179d5bb1823bf18cbe8d97.png]]
+: <matplotlib.image.AxesImage at 0x7f8c46d735e0>
+[[file:./.ob-jupyter/e5f38ab788e08c1975dd64bf3e77d24d61a85a1d.png]]
 :END:
 
 ** Compute mode coupling matrix
@@ -162,7 +219,9 @@ matrix in order to undo this effect given a binning file (format: lmin, lmax, lm
 \(\ell\)_{max} value of 1000
 #+BEGIN_SRC jupyter-python :results none
   lmax = 1000
-  binning_file = os.path.join(DEFAULT_DATA_DIR, "BIN_ACTPOL_50_4_SC_low_ell_startAt2.dat")
+  binning_file = "/tmp/tutorial_spectra_spin0and2/binning.dat"
+  from pspy import pspy_utils
+  pspy_utils.create_binning_file(bin_size=40, n_bins=100, file_name=binning_file)
   from pspy import so_mcm
   mbb_inv, Bbl = so_mcm.mcm_and_bbl_spin0and2(window, binning_file, lmax=lmax, type="Dl", niter=0)
 #+END_SRC
@@ -174,7 +233,7 @@ matrix in order to undo this effect given a binning file (format: lmin, lmax, lm
       mat = mbb_inv[label].copy()
       diagonal = np.eye(mat.shape[0], dtype=bool)
       mat[~diagonal] = np.nan
-      axes[i, 0].matshow(mat)
+      axes[i, 0].matshow(mat, cmap="viridis")
       mat = mbb_inv[label].copy()
       mat[diagonal] = np.nan
       axes[i, 1].matshow(mat)
@@ -185,7 +244,7 @@ matrix in order to undo this effect given a binning file (format: lmin, lmax, lm
 
 
 #+RESULTS:
-[[file:./.ob-jupyter/a0d8e3a70eeae2ceb1fdbe604e88be5f42153260.png]]
+[[file:./.ob-jupyter/ae4d82784eee6cfb1c7201d969315218d77233b0.png]]
 
 ** Compute alms and bin spectra
 #+BEGIN_SRC jupyter-python :results none
@@ -207,7 +266,8 @@ and we finally build a dictionary of cross split spectra
     lb, Db = so_spectra.bin_spectra(l,
                                     ps,
                                     binning_file,
-                                    lmax, type="Dl",
+                                    lmax,
+                                    type="Dl",
                                     mbb_inv=mbb_inv,
                                     spectra=spectra)
     Db_dict.update({"split{}xsplit{}".format(i1, i2): Db})
@@ -216,7 +276,7 @@ and we finally build a dictionary of cross split spectra
 To compare with the input $C_\ell$, we also compute the theory spectra and binned spectra
 #+BEGIN_SRC jupyter-python :results none
   from pspy import pspy_utils
-  l, ps_theory = pspy_utils.ps_lensed_theory_to_dict(cl_file, 'Dl', lmax=lmax)
+  l, ps_theory = pspy_utils.ps_lensed_theory_to_dict(cl_file, "Dl", lmax=lmax)
   ps_theory_b = so_mcm.apply_Bbl(Bbl, ps_theory, spectra=spectra)
 #+END_SRC
 

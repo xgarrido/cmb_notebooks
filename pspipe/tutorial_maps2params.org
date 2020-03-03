@@ -1,0 +1,658 @@
+#+TITLE: Tutorial on maps to parameters
+#+PROPERTY: header-args:jupyter-python :session tutorial_maps2params
+#+PROPERTY: header-args :exports both
+#+PROPERTY: header-args :tangle tutorial_maps2params.py
+
+* Introduction
+
+This tutorial shows how to generate the data needed for the simple map2parameter simulation. It
+generates the expected noise power spectra of the Simons Observatory (SO) large aperture telescope
+and the expected Planck white noise power spectra. It also generates beam files for SO and Planck.
+
+* Emacs config                                                     :noexport:
+
+#+BEGIN_SRC elisp :session tutorial_maps2params :results none :tangle no
+  (setenv "WORKON_HOME" (concat (getenv "HOME") "/Workdir/CMB/development/PSpipe"))
+  (pyvenv-workon "pyenv")
+#+END_SRC
+
+* Preamble
+=matplotlib= magic
+#+BEGIN_SRC jupyter-python :results none :tangle no
+  %matplotlib inline
+#+END_SRC
+
+Versions used for this tutorial
+#+BEGIN_SRC jupyter-python
+  import numpy as np
+  import matplotlib as mpl
+  import matplotlib.pyplot as plt
+  import healpy as hp
+  import pspipe
+  import pspy
+  import camb
+  print("     Numpy :", np.__version__)
+  print("Matplotlib :", mpl.__version__)
+  print("    healpy :", hp.__version__)
+  print("     psipe :", pspipe.__version__)
+  print("      pspy :", pspy.__version__)
+  print("      camb :", camb.__version__)
+#+END_SRC
+
+#+RESULTS:
+:RESULTS:
+# [goto error]
+#+begin_example
+
+  ImportErrorTraceback (most recent call last)
+  <ipython-input-2-42d13ff9c715> in <module>
+        4 import healpy as hp
+        5 import pspipe
+  ----> 6 import pspy
+        7 import camb
+        8 print("     Numpy :", np.__version__)
+
+  ~/Workdir/CMB/development/PSpipe/pyenv/lib/python3.8/site-packages/pspy/__init__.py in <module>
+        1 from __future__ import absolute_import, print_function
+        2
+  ----> 3 from pspy import (mcm_fortran, pspy_utils, so_config, so_cov, so_dict, so_map,
+        4                   so_map_preprocessing, so_mcm, so_misc, so_mpi, so_spectra,
+        5                   so_window, sph_tools)
+
+  ~/Workdir/CMB/development/PSpipe/pyenv/lib/python3.8/site-packages/pspy/so_cov.py in <module>
+        6 import numpy as np
+        7
+  ----> 8 from pspy import pspy_utils, so_mcm, sph_tools
+        9 from pspy.cov_fortran import cov_fortran
+       10
+
+  ~/Workdir/CMB/development/PSpipe/pyenv/lib/python3.8/site-packages/pspy/so_mcm.py in <module>
+        9 import numpy as np
+       10
+  ---> 11 from pspy import pspy_utils, sph_tools
+       12 from pspy.mcm_fortran import mcm_fortran
+       13
+
+  ~/Workdir/CMB/development/PSpipe/pyenv/lib/python3.8/site-packages/pspy/sph_tools.py in <module>
+        4 import healpy as hp
+        5 import numpy as np
+  ----> 6 from pixell import curvedsky, enmap
+        7
+        8 from pspy import so_window
+
+  ~/Workdir/CMB/development/PSpipe/pyenv/lib/python3.8/site-packages/pixell/curvedsky.py in <module>
+        2 full sky."""
+        3 from __future__ import print_function
+  ----> 4 from . import sharp
+        5 import numpy as np
+        6 from . import enmap, powspec, wcsutils, utils
+
+  ImportError: /home/garrido/Workdir/CMB/development/PSpipe/pyenv/lib/python3.8/site-packages/pixell/sharp.cpython-38-x86_64-linux-gnu.so: undefined symbol: __log_finite
+#+end_example
+:END:
+
+Finally we use the Planck colormap as default /via/ =pixell=
+#+BEGIN_SRC jupyter-python :results none
+  from pixell import colorize
+  colorize.mpl_setdefault("planck")
+#+END_SRC
+
+* Prepare simulation data
+** Multipole range & experiment frequency channels
+Simulations will be generated between $\ell_text{min} = 2$ and $\ell_\text{max} = 10^4$
+#+BEGIN_SRC jupyter-python :results none
+  ell_min, ell_max = 2, 10000
+  ell = np.arange(ell_min, ell_max)
+#+END_SRC
+
+For computation of noise levels and beam harmonics, we will use the following frequency channels for
+SO and Planck experiments
+#+BEGIN_SRC jupyter-python :results none
+  frequencies = {
+      "LAT": [27, 39, 93, 145, 225, 280],
+      "Planck": [100, 143, 217, 353]
+  }
+#+END_SRC
+
+As we will see later, we will use less bands and much less multipoles for spectra computation.
+
+** Theoritical input spectra
+Using [[https://camb.readthedocs.io/en/latest/][CAMB]] and a set of cosmological parameters, we can produce $C_\ell$ for the different spectra
+#+BEGIN_SRC jupyter-python :results none
+  cosmo_params = {
+      "H0": 67.5,
+      "As": 1e-10*np.exp(3.044),
+      "ombh2": 0.02237,
+      "omch2": 0.1200,
+      "ns": 0.9649,
+      "Alens": 1.0,
+      "tau": 0.0544
+  }
+  pars = camb.set_params(**cosmo_params)
+  pars.set_for_lmax(ell_max, lens_potential_accuracy=1)
+  results = camb.get_results(pars)
+  powers = results.get_cmb_power_spectra(pars, CMB_unit="muK")
+#+END_SRC
+
+and plot the results
+#+BEGIN_SRC jupyter-python
+  spectra = ["tt", "ee", "bb", "te"]
+  dls = {cl: powers["total"][ell_min:ell_max, i]
+         for i, cl in enumerate(spectra)}
+  fig, axes = plt.subplots(2, 1, sharex=True, figsize=(6, 8))
+  axes[0].set_yscale("log")
+  for i, (spec, dl) in enumerate(dls.items()):
+      ax = axes[1] if spec == "te" else axes[0]
+      ax.plot(ell, dl, "-C{}".format(i), label=spec.upper())
+
+  for ax in axes:
+      ax.set_ylabel(r"$D_\ell$")
+      ax.legend()
+      axes[1].set_xlabel(r"$\ell$")
+      plt.tight_layout()
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/b42d9645e4f96e8404b19c8150335b30bb0b2ddd.png]]
+
+** Computation of experimental noise
+The noise levels in temperature and polarisation are stored within two dictionaries
+#+BEGIN_SRC jupyter-python :results none
+  n_ell_t = {}
+  n_ell_pol = {}
+#+END_SRC
+
+*** SO noise
+We use the SO noise calculator to compute the expected noise in temperature and polarisation for
+which we have to specify a sensitivity mode (1: baseline, 2:goal), and a 40% fraction of sky to
+calculate the associated noise level. The outputs of the noise calculator followed an hardcoded
+sequence of cross frequencies that we explicitely write here within the =f_pairs_LAT=
+dictionary. Other missing cross frequencies are supposed to give a zero noise level
+#+BEGIN_SRC jupyter-python :results none
+  import so_noise_calculator_public_20180822 as noise_calc
+  ell, n_ell_t_LAT, n_ell_pol_LAT, _ = noise_calc.Simons_Observatory_V3_LA_noise(sensitivity_mode=1,
+                                                                                 f_sky=0.4,
+                                                                                 ell_min=ell_min,
+                                                                                 ell_max=ell_max,
+                                                                                 delta_ell=1,
+                                                                                 apply_beam_correction=False)
+
+  from itertools import combinations_with_replacement as cwr
+  for cross in cwr(frequencies["LAT"], 2):
+      n_ell_t["LAT", cross[0], cross[1]] = np.zeros_like(ell, dtype=np.float)
+      n_ell_pol["LAT", cross[0], cross[1]] = np.zeros_like(ell, dtype=np.float)
+  f_pairs_LAT = [("LAT", 27, 27),
+                 ("LAT", 39, 39),
+                 ("LAT", 93, 93),
+                 ("LAT", 145, 145),
+                 ("LAT", 225, 225),
+                 ("LAT", 280, 280),
+                 ("LAT", 27, 39),
+                 ("LAT", 93, 145),
+                 ("LAT", 225, 280)]
+  for i, f_pair in enumerate(f_pairs_LAT):
+    n_ell_t[f_pair] = n_ell_t_LAT[i]
+    n_ell_pol[f_pair] = n_ell_pol_LAT[i]
+#+END_SRC
+
+*** Planck noise
+We will use information from the Table 4 of https://arxiv.org/pdf/1807.06205.pdf. Planck noise will
+be assumed to be white for these simulations and Planck standard deviations are in µK.arcmin.
+#+BEGIN_SRC jupyter-python :results none
+  for cross in cwr(frequencies["Planck"], 2):
+      n_ell_t["Planck", cross[0], cross[1]] = np.zeros_like(ell, dtype=np.float)
+      n_ell_pol["Planck", cross[0], cross[1]] = np.zeros_like(ell, dtype=np.float)
+  sigma_t = {
+      ("Planck", 100, 100): 77.4,
+      ("Planck", 143, 143): 33.0,
+      ("Planck", 217, 217): 46.8,
+      ("Planck", 353, 353): 153.6
+  }
+  for f_pair, sigma in sigma_t.items():
+    sigma_rad = np.deg2rad(sigma) / 60
+    n_ell_t[f_pair] = ell * 0 + sigma_rad**2
+
+  sigma_pol = {
+      ("Planck", 100, 100): 117.6,
+      ("Planck", 143, 143): 70.2,
+      ("Planck", 217, 217): 105.0,
+      ("Planck", 353, 353): 438.6
+  }
+  for f_pair, sigma in sigma_pol.items():
+    sigma_rad = np.deg2rad(sigma) / 60
+    n_ell_pol[f_pair] = ell * 0 + sigma_rad**2
+#+END_SRC
+
+** Generation of beam harmonics
+Finally let's generate the beam harmonic transform for Planck and SO LAT. For Planck we will use
+information from the Table 4 of https://arxiv.org/pdf/1807.06205.pdf. For SO we use info from Table
+1 of https://arxiv.org/pdf/1808.07445.pdf
+
+#+BEGIN_SRC jupyter-python :results none
+  beam_fwhm = {}
+  beam_fwhm["LAT", 27] = 7.4
+  beam_fwhm["LAT", 39] = 5.1
+  beam_fwhm["LAT", 93] = 2.2
+  beam_fwhm["LAT", 145] = 1.4
+  beam_fwhm["LAT", 225] = 1.0
+  beam_fwhm["LAT", 280] = 0.9
+
+  beam_fwhm["Planck", 100] = 9.68
+  beam_fwhm["Planck", 143] = 7.30
+  beam_fwhm["Planck", 217] = 5.02
+  beam_fwhm["Planck", 353] = 4.94
+#+END_SRC
+
+Store $b_\ell$ and plot them
+#+BEGIN_SRC jupyter-python
+  bl = {}
+  from pspy import pspy_utils
+  for exp, freqs in frequencies.items():
+    for freq in freqs:
+      idx = (exp, freq)
+      ell_bl, bl[idx] = pspy_utils.beam_from_fwhm(beam_fwhm[idx], ell_max)
+      plt.plot(ell_bl, bl[idx], label="{} - {} GHz".format(exp, freq),
+               linestyle="-" if exp == "LAT" else "--")
+  plt.xlabel(r"$\ell$")
+  plt.ylabel(r"$b_{\ell}$")
+  plt.legend(loc="upper left", bbox_to_anchor=(1,1));
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/4833672308eed7400e5271fb63e76cc7f7c781ee.png]]
+
+** Plotting noise levels
+Given beam transform harmonics, we can now compare the noise power spectra with signal power spectra
+previously generated with [[https://camb.readthedocs.io/en/latest/][CAMB]]. Let's plot everything together
+#+BEGIN_SRC jupyter-python
+  plt.figure(figsize=(8, 12))
+  grid = plt.GridSpec(2, 1, hspace=0.1, wspace=0)
+
+  fac = ell * (ell + 1) / (2*np.pi)
+
+  TT = plt.subplot(grid[0], xticklabels=[])
+  TT.semilogy()
+  TT.set_ylim(1, 10**5)
+  TT.set_ylabel(r"$N^{T}_{\ell}$")
+  TT.plot(ell, dls["tt"], "k")
+
+  EE = plt.subplot(grid[1])
+  EE.semilogy()
+  EE.set_ylim(0.05, 10**3)
+  EE.set_xlabel(r"$\ell$")
+  EE.set_ylabel(r"$N^{P}_{\ell}$")
+  EE.plot(ell, dls["ee"], "k")
+
+  for exp, freqs in frequencies.items():
+    for f1, f2 in cwr(freqs, 2):
+      name1, name2 = (exp, f1), (exp, f2)
+      name = (exp, f1, f2)
+      # Plot only non-zero noise
+      if not np.any(n_ell_t[name]): continue
+
+      TT.plot(ell, n_ell_t[name] * fac / (bl[name1] * bl[name2]), label="{} - {}x{} GHz".format(*name),
+              linestyle="-" if exp == "LAT" else "--")
+      EE.plot(ell, n_ell_pol[name] * fac / (bl[name1] * bl[name2]),
+              linestyle="-" if exp == "LAT" else "--")
+
+  TT.legend(loc="upper left", bbox_to_anchor=(1,1));
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/6698d13d6121af8efcafa18147fd6d5bad852504.png]]
+** Binning
+We create a binning file made of 200 bins with an adaptative bin size. The output file has 3
+columns : \(\ell\)_{min}, \(\ell\)_{max}, \(\ell\)_{mean}
+#+BEGIN_SRC jupyter-python :results none
+  n_bins = 200
+  bin_size = np.empty(n_bins)
+  bin_size[0] = 50
+  bin_size[1:80] = 35
+  bin_size[80:100] = 60
+  bin_size[100:] = 100
+
+  bin_min = 2
+  bins = np.empty((n_bins, 3))
+  for i, bs in enumerate(bin_size):
+      bin_max = bin_min + bs
+      bins[i] = bin_min, bin_max, np.mean([bin_min, bin_max])
+      bin_min += bs + 1
+
+  binning_file = "/tmp/binning.dat"
+  np.savetxt(binning_file, bins)
+#+END_SRC
+
+** Generation of foregrounds
+To produce foreground levels, we use the =fgspectra= library
+https://github.com/simonsobs/fgspectra. We only consider foreground components for the temperature
+cross-spectra and for the main LAT frequencies (93, 145 and 225 GHz).
+#+BEGIN_SRC jupyter-python :results none
+  frequencies["LAT"] = [93, 145, 225]
+#+END_SRC
+
+The foreground model is made of
+- a kSZ and tSZ components,
+- a cibp and a cibc components,
+- a radio component
+#+BEGIN_SRC jupyter-python :results none
+  components = {
+      "tt": ["kSZ", "cibp", "radio", "tSZ", "cibc"],
+      "te": [],
+      "ee": []
+  }
+#+END_SRC
+with the following foreground parameters
+#+BEGIN_SRC jupyter-python :results none
+  fg_params = {
+      "a_tSZ": 3.30,
+      "a_kSZ": 1.60,
+      "a_p": 6.90,
+      "beta_p": 2.08,
+      "a_c": 4.90,
+      "beta_c": 2.20,
+      "n_CIBC": 1.20,
+      "a_s": 3.10,
+      "T_d": 9.60
+  }
+#+END_SRC
+
+The foreground computation is done by the =mflike= likelihood in order to have a fully consistent way
+to simulate foregrounds and later, to reconstruct nuisance parameters.
+#+BEGIN_SRC jupyter-python :results none
+  fg_model = {
+      "normalisation": {
+          "nu_0": 150.0,
+          "ell_0": 3000,
+          "T_CMB": 2.725
+      },
+      "components": components
+  }
+  from mflike import get_foreground_model
+  fg_dict = get_foreground_model(fg_params, fg_model, [93, 145, 225], ell_max)
+#+END_SRC
+
+For =TT=, we can plot foreground shape given cross frequencies and compare it to signal power spectra
+#+BEGIN_SRC jupyter-python
+  mode = "tt"
+  fig, axes = plt.subplots(3, 3, figsize=(9, 9), sharex=True, sharey=True)
+  from itertools import product
+  for i, cross in enumerate(product(frequencies["LAT"], frequencies["LAT"])):
+      idx = (i%3, i//3)
+      ax = axes[idx]
+      if idx in zip(*np.triu_indices(3, k=1)):
+          fig.delaxes(ax)
+          continue
+      for c in components[mode]:
+          ax.plot(ell, fg_dict[mode, c, cross[0], cross[1]])
+      ax.plot(ell, fg_dict[mode, "all", cross[0], cross[1]], color="black")
+      ax.plot(ell, dls[mode], color="gray")
+      ax.legend([], title="{}x{} GHz".format(*cross))
+      ax.set_yscale("log")
+      ax.set_ylim(10**-1, 10**4)
+
+  for i in range(3):
+    axes[-1, i].set_xlabel("$\ell$")
+    axes[i, 0].set_ylabel("$D_\ell$")
+  fig.legend([c for c in components[mode]] + ["all"], title=mode.upper(), bbox_to_anchor=(0.5,1))
+  plt.tight_layout()
+
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/4810bc5cacaed464002193727b6f7381ee97b2e8.png]]
+
+* Compute mode coupling matrices and window functions
+
+We now have to compute the window functions, the mode coupling matrices (mcm) and the binning
+matrices (bbl) for the different frequency channels of the different CMB experiments. For
+illustrative purposes, everything will be done at low resolution namely =nside=1024= to reduce time
+computation.
+
+** Mask and window functions
+We generate window function by considering three masks:
+- a galactic mask,
+- a survey mask,
+- a point source mask.
+
+Galactic and survey masks are pure =numpy= arrays
+#+BEGIN_SRC jupyter-python :results none
+  galactic_mask = np.load("./masks/mask_equatorial_1024.npz")["mask"]
+  survey_mask = np.load("./masks/survey_mask_1024.npz")["mask"]
+#+END_SRC
+
+The point source mask is made of 100 holes each of 10 arcmin size that we apodize with a 'C1'
+apodization scheme and 0.3 degree size. We build it on top of a =HEALPIX= map with =nside=1024=
+#+BEGIN_SRC jupyter-python :results none
+  from pspy import so_map
+  mask = so_map.healpix_template(ncomp=1, nside=1024)
+  mask.data[:] = 1
+  from pspy import so_window
+  mask = so_map.simulate_source_mask(mask, n_holes=100, hole_radius_arcmin=10)
+  point_source_mask = so_window.create_apodization(mask, apo_type="C1", apo_radius_degree=0.3)
+#+END_SRC
+
+Let's plot them next to each other
+#+BEGIN_SRC jupyter-python
+  plt.figure(figsize=(12, 4))
+  hp.mollview(galactic_mask, title="Galactic", sub=(1, 3, 1))
+  hp.mollview(survey_mask, title="Survey", sub=(1, 3, 2))
+  hp.mollview(point_source_mask.data, title="Point source", sub=(1, 3, 3))
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/ba98bfbe914aad2bf72203875f62a2d99c65d150.png]]
+
+Now, let's build the window by adding each mask (galactic and survey masks are first apodized with a
+5° beam)
+#+BEGIN_SRC jupyter-python
+  window = so_map.healpix_template(ncomp=1, nside=1024)
+  window.data[:] = 1
+  window.data *= galactic_mask.data
+  window.data *= survey_mask.data
+  window = so_window.create_apodization(window, apo_type="C1", apo_radius_degree=5)
+  window.data *= point_source_mask.data
+
+  hp.mollview(window.data, title="Window function")
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/4c89c5657e6fce918803c5993ff99942bb68ae7a.png]]
+
+** Mode coupling matrices
+
+Next step consists to compute the mode coupling matrices and binning matrices for the different
+cross spectra given the window function and the beam harmonics transform computed above. We only
+consider LAT experiment with the three main frequency channels.
+
+For spin 0 and 2 the window need to be a tuple made of two objects: the window used for spin 0 and
+the one used for spin 2. Nevertheless, within this simple notebook, the window functions are the
+same over the different frequency. Consequently, the =win1= and =win2= arguments of
+=so_mcm.mcm_and_bbl_spin0and2= function are the same and consists of a tuple of two window
+function. In more general case, this will be different.
+
+For each cross spectra /i.e./ =LAT_93xLAT_93=... we store the mcm and bbl matrices as follow
+#+BEGIN_SRC jupyter-python :async true
+  from pspy import so_mcm
+  mbb_inv, bbl = {}, {}
+  for f1, f2 in cwr(frequencies["LAT"], 2):
+    name = "LAT{}xLAT{}".format(f1, f2)
+    print("Processing {}...".format(name))
+    mbb_inv[name], bbl[name] = so_mcm.mcm_and_bbl_spin0and2(win1=(window, window),
+                                                            win2=(window, window),
+                                                            bl1=(bl["LAT", f1], bl["LAT", f1]),
+                                                            bl2=(bl["LAT", f2], bl["LAT", f2]),
+                                                            binning_file=binning_file,
+                                                            niter=3,
+                                                            type="Dl",
+                                                            lmax=2000,
+                                                            lmax_pad=2500)
+
+#+END_SRC
+
+#+RESULTS:
+: Processing LAT93xLAT93...
+: Processing LAT93xLAT145...
+: Processing LAT93xLAT225...
+: Processing LAT145xLAT145...
+: Processing LAT145xLAT225...
+: Processing LAT225xLAT225...
+
+We can plot the $M_{bb}^{-1}$ matrix
+#+BEGIN_SRC jupyter-python
+  def plot_mcm(spin):
+      def _get_min_max():
+          a = np.concatenate([np.log10(np.abs(v2+1e-15)) for k1, v1 in mbb_inv.items()
+                              for k2, v2 in v1.items() if k2 == spin])
+          return np.min(a), np.max(a)
+      vmin, vmax = _get_min_max()
+      fig, axes = plt.subplots(3, 3, figsize=(9, 9), sharex=True, sharey=True)
+      from itertools import product
+      for i, cross in enumerate(product(frequencies["LAT"], frequencies["LAT"])):
+          idx = (i%3, i//3)
+          ax = axes[idx]
+          if idx in zip(*np.triu_indices(3, k=1)):
+              fig.delaxes(ax)
+              continue
+          name = "LAT{}xLAT{}".format(*cross)
+          mcm = mbb_inv[name][spin]
+          im = ax.imshow(np.log10(np.abs(mcm)), vmin=vmin, vmax=vmax)
+          ax.legend([], title="LAT {}x{} GHz".format(*cross))
+      plt.tight_layout()
+      # Now adding the colorbar
+      cbaxes = fig.add_axes([0.8, 0.4, 0.015, 0.5])
+      cb = plt.colorbar(im, cax=cbaxes)
+      cb.set_label("$\log$(%s)" % spin)
+  plot_mcm(spin="spin0xspin0")
+  plot_mcm(spin="spin0xspin2")
+  plot_mcm(spin="spin2xspin2")
+#+END_SRC
+
+#+RESULTS:
+:RESULTS:
+: <ipython-input-27-0b376b43796a>:17: RuntimeWarning: divide by zero encountered in log10
+:   im = ax.imshow(np.log10(np.abs(mcm)), vmin=vmin, vmax=vmax)
+[[file:./.ob-jupyter/1fa97a204961658ae421637f834c174e7e9050b1.png]]
+[[file:./.ob-jupyter/824db777ed642e4b8b0fb27029bc37eac4f2b173.png]]
+[[file:./.ob-jupyter/4210f80404d1748db5bf48c72602d20e475bc5b7.png]]
+:END:
+
+We can also plot the diagonal terms of the $M_{bb}^{-1}$ for the different spin combinations
+#+BEGIN_SRC jupyter-python
+  fig, axes = plt.subplots(3, 3, figsize=(12, 8), sharey="row", sharex="col")
+  for cross, spins in mbb_inv.items():
+      for i, spin in enumerate(["spin0xspin0", "spin0xspin2", "spin2xspin2"]):
+          for k in [-1, 0, +1]:
+              if i == 0:
+                axes[k+1, i].legend([], title="diagonal k = {}".format(k), loc="upper left")
+              axes[k+1, i].plot(np.diag(spins[spin], k=k), label=cross)
+
+          axes[0, i].set_title(spin)
+      axes[0, -1].legend(loc="upper left", bbox_to_anchor=(1,1))
+  plt.tight_layout()
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/b41551fc2c468ecf3f13d204549f48e28cea4121.png]]
+* Generation of simulations and power spectra
+In this section we will now generate the simulations and compute their power spectra. We will
+consider two data splits and thus simulate experimental noise for both set. Given the data split we
+will finally compute the auto and cross spectra.
+
+** Power spectra matrices
+
+We will first create a foreground matrix from the foreground power spectra computed in [[Generation of
+foregrounds]] section. The final matrix will have a =[nfreq, nfreq, ell]= shape to get correlated
+foregrounds over different frequency channels and everything must be in raw-\(C_\ell\) /i.e./ we
+multiply foreground value by \(2\pi/(\ell(\ell+1)\). Only foregrounds for temperature are considered.
+#+BEGIN_SRC jupyter-python :results none
+  nfreqs = len(frequencies["LAT"])
+  ps_fg = np.zeros((nfreqs, nfreqs, ell_max))
+  for i, cross in enumerate(product(frequencies["LAT"], frequencies["LAT"])):
+    fg_all = fg_dict["tt", "all", cross[0], cross[1]] * 2 * np.pi / (ell * (ell + 1))
+    ps_fg[i%nfreqs, i//nfreqs, ell_min:] = fg_all
+#+END_SRC
+
+Then we do the same for the noise power spectra both in temperature and polarisation given that we
+only consider here the LAT experiment. We basically cut noise below =ell_cut=30= since noise curves
+diverge at low multipole and we set the noise level to zero below this value. We also have to take
+into account the number of data splits and multiply the noise levels by this value
+#+BEGIN_SRC jupyter-python :results none
+  ell_cut = 30
+  n_splits = 2
+  ps_noise_t = np.zeros((nfreqs, nfreqs, ell_max))
+  ps_noise_pol = np.zeros((nfreqs, nfreqs, ell_max))
+  for i, cross in enumerate(product(frequencies["LAT"], frequencies["LAT"])):
+    idx = ("LAT", cross[0], cross[1])
+    if idx not in n_ell_t:
+      idx = ("LAT", cross[1], cross[0])
+    ps_noise_t[i%nfreqs, i//nfreqs, ell_cut:] = n_ell_t[idx][ell_cut-ell_min:] * n_splits
+    ps_noise_pol[i%nfreqs, i//nfreqs, ell_cut:] = n_ell_pol[idx][ell_cut-ell_min:] * n_splits
+#+END_SRC
+
+Finally, we generate the CMB power spectra matrix were row and columns correspond to (T, E, B)
+spectra: the final matrix has a $3\times3\times\ell$ shape
+#+BEGIN_SRC jupyter-python :results none
+  from pixell import powspec
+  cls = powers["total"][:ell_max].T.copy()
+  cls[:, ell_min:] *= (2*np.pi)/(ell*(ell+1))
+  ps_cmb = powspec.sym_expand(cls)
+#+END_SRC
+
+** alm computation
+
+Now that we have the power spectra for CMB, noise and foregrounds, we can compute the associated
+alm coefficients up to \ell_{max} = 6000
+#+BEGIN_SRC jupyter-python :results none
+  from pixell import curvedsky
+  cmb_alms = curvedsky.rand_alm(ps_cmb, lmax=2000)
+  fg_alms = curvedsky.rand_alm(ps_fg, lmax=2000)
+#+END_SRC
+
+We have to generate realistic simulations by adding the foregrounds and noise to CMB
+data/alms. Foregrounds are only added for temperature (so far). We also have to "blur" the
+simulation given the beam computed in previous section. Finally we project everything onto a =HEALPIX=
+map with ~nside=1024~ corresponding to the maximum $\ell$ value of 2000.
+#+BEGIN_SRC jupyter-python :results none
+  from pspy import so_map, sph_tools
+  template = so_map.healpix_template(ncomp=3, nside=1024)
+  maps = {"TEB": sph_tools.alm2map(cmb_alms, template.copy())}
+  for i, freq in enumerate(frequencies["LAT"]):
+    sim_alms = cmb_alms.copy()
+    sim_alms[0] += fg_alms[i]
+    for alm in sim_alms:
+      hp.almxfl(alm, bl["LAT", freq], inplace=True)
+
+    for k in range(n_splits):
+      split_alms = sim_alms.copy()
+      split_alms[0] += curvedsky.rand_alm(ps_noise_t, lmax=2000)[i]
+      split_alms[1] += curvedsky.rand_alm(ps_noise_pol, lmax=2000)[i]
+      split_alms[2] += curvedsky.rand_alm(ps_noise_pol, lmax=2000)[i]
+      from pspy import sph_tools
+      maps["LAT", freq, k] = sph_tools.alm2map(split_alms, template.copy())
+#+END_SRC
+
+Let's plot the maps associated to each frequency splits and let's compare it to the original CMB
+map.
+#+BEGIN_SRC jupyter-python
+  # Scale color maps
+  vmins = [np.min([m.data[i] for m in maps.values()]) for i in range(3)]
+  vmaxs = [np.max([m.data[i] for m in maps.values()]) for i in range(3)]
+
+  fig, axes = plt.subplots(nrows=len(maps), ncols=3, figsize=(15, 21))
+  axes = axes.flatten()
+  iax = 0
+  for k, v in maps.items():
+    for j in range(3):
+        plt.axes(axes[iax])
+        if isinstance(k, tuple):
+          title = "{} GHz - split {}".format(k[1], k[2])
+          plt.text(0.5, 1, title)
+        else:
+          title = "{}".format(k[j])
+          plt.text(0, 0.5, title)
+        hp.mollview(v.data[j], title=None, hold=True, min=vmins[j], max=vmaxs[j], cbar=False)
+        iax += 1
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/93a9ad62cb85e956d198da705da460b7f5e8639c.png]]

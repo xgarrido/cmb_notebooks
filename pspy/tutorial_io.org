@@ -16,9 +16,13 @@ This tutorial shows how to read/write and plot a SO map. We will use both pixell
 #+END_SRC
 
 * Preamble
+=matplotlib= magic
+#+BEGIN_SRC jupyter-python :results none :tangle no
+  %matplotlib inline
+#+END_SRC
+
 Versions used for this tutorial
 #+BEGIN_SRC jupyter-python
-  %matplotlib inline
   import numpy as np
   import matplotlib as mpl
   import matplotlib.pyplot as plt
@@ -51,7 +55,7 @@ from declination =dec0= to =dec1= (all in degrees). The resolution will be 1 arc
   res = 1
   ncomp = 3
   from pspy import so_map
-  template_car= so_map.car_template(ncomp, ra0, ra1, dec0, dec1, res)
+  template_car = so_map.car_template(ncomp, ra0, ra1, dec0, dec1, res)
 #+END_SRC
 
 We do the same with =HEALPIX=
