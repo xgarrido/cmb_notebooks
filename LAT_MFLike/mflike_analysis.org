@@ -77,7 +77,7 @@ Let's plot the chains size for all the simulations
 #+begin_example
   |   Sim. |   mcmc 1 |   mcmc 2 |   mcmc 3 |   mcmc 4 |   total |
   |--------+----------+----------+----------+----------+---------|
-  |      0 |      401 |      461 |      421 |      441 |    1724 |
+  |      0 |    16681 |    12981 |    16141 |    16161 |   61964 |
   |      1 |    15841 |    18781 |    16921 |    19261 |   70804 |
   |      2 |    17901 |    19821 |    18041 |    14001 |   69764 |
   |      3 |    12361 |    20321 |    13921 |    18861 |   65464 |
@@ -181,22 +181,22 @@ Let's plot the chains size for all the simulations
   |    101 |    18341 |    20121 |    18681 |    21001 |   78144 |
   |    102 |    19121 |    20601 |    17421 |    19461 |   76604 |
   |    103 |    19941 |    22821 |    21301 |    19541 |   83604 |
-  |    104 |    18221 |    18361 |    20421 |    20101 |   77104 |
-  |    105 |    16841 |    17341 |    20301 |    16761 |   71244 |
-  |    106 |    15281 |    18521 |    16501 |    16221 |   66524 |
-  |    107 |    16521 |    16881 |    16941 |    13281 |   63624 |
-  |    108 |    15341 |    16041 |    11141 |    13501 |   56024 |
-  |    109 |    13101 |    15061 |     9541 |    16481 |   54184 |
-  |    110 |    12021 |    14341 |    11241 |    13061 |   50664 |
-  |    111 |    14021 |    15541 |    16141 |    13661 |   59364 |
-  |    112 |    16441 |    16781 |    17181 |    14121 |   64524 |
-  |    113 |    12661 |    13041 |    12521 |     7741 |   45964 |
-  |    114 |    13261 |    15661 |    13981 |    14081 |   56984 |
-  |    115 |    13921 |    11781 |    13841 |    16001 |   55544 |
-  |    116 |     5021 |    13521 |    13561 |    12781 |   44884 |
-  |    117 |    13501 |    14001 |    12241 |    14201 |   53944 |
-  |    118 |    13601 |    13701 |    14401 |    12941 |   54644 |
-  |    119 |    12001 |    10021 |    14981 |    13381 |   50384 |
+  |    104 |    18221 |    18621 |    20421 |    20261 |   77524 |
+  |    105 |    18361 |    18901 |    21661 |    20881 |   79804 |
+  |    106 |    17321 |    19301 |    18721 |    19681 |   75024 |
+  |    107 |    19841 |    20401 |    20581 |    17181 |   78004 |
+  |    108 |    19461 |    20301 |    15381 |    17641 |   72784 |
+  |    109 |    17341 |    18781 |    13361 |    20501 |   69984 |
+  |    110 |    15101 |    17681 |    17921 |    16241 |   66944 |
+  |    111 |    17141 |    20541 |    20381 |    17581 |   75644 |
+  |    112 |    20801 |    20761 |    20541 |    17881 |   79984 |
+  |    113 |    18521 |    17261 |    17801 |    12341 |   65924 |
+  |    114 |    17321 |    19901 |    19621 |    18161 |   75004 |
+  |    115 |    18201 |    16221 |    19541 |    21641 |   75604 |
+  |    116 |     7921 |    18501 |    17661 |    18481 |   62564 |
+  |    117 |    17881 |    19401 |    17821 |    20041 |   75144 |
+  |    118 |    19441 |    19441 |    19861 |    18121 |   76864 |
+  |    119 |    16561 |    14801 |    21301 |    19281 |   71944 |
 #+end_example
 
 
@@ -232,25 +232,17 @@ Plot chains for the CMB & nuisance parameters given a simulation id (up to 100)
 #+BEGIN_SRC jupyter-python
   # plot_chains(chains, params=cosmo_params+nuisance_params, ncol=4)
   sim_id = 0
-  chains = "./data/so_likelihood_sacc/sim_tt_{}/mcmc".format(sim_id)
-  plot_chains(chains, params=cosmo_params, ncol=4)
-  chains = "./data/so_likelihood_sacc/sim_ttteee_{}/mcmc".format(sim_id)
-  # plot_chains(chains, params=cosmo_params+nuisance_params, ncol=4)
-  plot_chains(chains, params=cosmo_params, ncol=4)
+  chains = "./data/so_likelihood_sacc/sim_{}/mcmc".format(sim_id)
+  plot_chains(chains, params=cosmo_params+nuisance_params, ncol=4)
 #+END_SRC
 
 #+RESULTS:
 :RESULTS:
-: WARNING:root:outlier fraction 0.008256880733944955
-: WARNING:root:outlier fraction 0.008189655172413794
-: WARNING:root:outlier fraction 0.0034201954397394137
-: WARNING:root:outlier fraction 0.00072992700729927
-: WARNING:root:outlier fraction 0.0032012195121951218
-: WARNING:root:outlier fraction 0.01949685534591195
-: WARNING:root:outlier fraction 0.0032640949554896144
-: WARNING:root:outlier fraction 0.008189655172413794
-[[file:./.ob-jupyter/dadebafd824f15c824c96112b08174e9ed5be6d3.png]]
-[[file:./.ob-jupyter/0fc94f8483211e2e5b937c45f140d46133d034fb.png]]
+: WARNING:root:outlier fraction 0.0007829977628635347
+: WARNING:root:outlier fraction 0.005283018867924529
+: WARNING:root:outlier fraction 0.0014130434782608696
+: WARNING:root:outlier fraction 0.0023743016759776537
+[[file:./.ob-jupyter/8eca22a4052953f20f99b5ce44f4dd55bf1f692b.png]]
 :END:
 
 * MCMC distributions
@@ -355,7 +347,7 @@ Load the different samples
 #+BEGIN_SRC jupyter-python :results none
   from getdist import loadMCSamples
   samples = [loadMCSamples("./data/so_likelihood_sacc/sim_{}/mcmc".format(sim_id),
-                           settings={"ignore_rows": 0.4}) for sim_id in range(1, 120)]
+                           settings={"ignore_rows": 0.4}) for sim_id in range(120)]
 #+END_SRC
 
 ** CMB parameters
@@ -399,8 +391,6 @@ Define global plot settings
   plot_settings.solid_colors = "tab10"
   plot_settings.line_styles = "tab10"
   plot_settings.legend_fontsize = 15
-  plot_settings.solid_colors = ["C3", "C0", "C1", "C2"]
-  plot_settings.line_styles = plot_settings.solid_colors
 #+END_SRC
 
 Show input values
@@ -418,30 +408,42 @@ Show input values
 Load MCMC samples
 #+BEGIN_SRC jupyter-python :results none
   sim_id = 0
+  from getdist import loadMCSamples
   samples = [loadMCSamples("./data/so_likelihood_sacc/sim_{}_{}/mcmc".format(spec, sim_id),
                            settings={"ignore_rows": 0.4}) for spec in ["tt", "ee", "te", "ttteee"]]
 #+END_SRC
 
-Plot posteriors distributions
+Plot posteriors distributions of CMB parameters
 #+BEGIN_SRC jupyter-python
   from getdist import plots
   g = plots.get_subplot_plotter(settings=plot_settings)
-  g.triangle_plot(samples, cosmo_params, filled=True, legend_labels=["TT", "EE", "TE", "TT, TE, EE"])
-  # g.add_legend(["TT, TE, EE", "TT", "EE", "TE"],
-  #              colored_text=False, figure=True, align_right=True)
+  colors = ["C2", "C1", "C0", "C3"]
+  g.triangle_plot(samples, cosmo_params,
+                  filled=True, legend_labels=["TT", "EE", "TE", "TT, TE, EE"],
+                  colors=colors, diag1d_kwargs={"colors": colors})
   # Show input value
   show_input(g, cosmo_params)
   # Show prior on tau
   ax = g.subplots[-1, -1]
   xmin, xmax, ymin, ymax = ax.axis()
   x = np.linspace(xmin, xmax, 100)
-q  from scipy.stats import norm
+  from scipy.stats import norm
   ax.plot(x, 0.018*norm.pdf(x, 0.054, 0.0073), color="gray", ls="--", label=r"$\tau$ prior")
   ax.legend(loc="upper left", bbox_to_anchor=(1,1));
 #+END_SRC
 
 #+RESULTS:
-[[file:./.ob-jupyter/da8f9827d5e63cce90a9eed73417bd5dfd670a6f.png]]
+[[file:./.ob-jupyter/c7c62b27828d896b9f5ff701349682c498cfc1b3.png]]
+
+#+BEGIN_SRC jupyter-python
+  g.triangle_plot([samples[0], samples[-1]], nuisance_params,
+                  filled=True, legend_labels=["TT", "TT, TE, EE"],
+                  colors=["C2", "C3"], diag1d_kwargs={"colors": ["C2", "C3"]})
+  show_input(g, nuisance_params)
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/a449f6c090f546e7e3a7435ca7b74a32e78ffab2.png]]
 
 ** Correlation plot
 
