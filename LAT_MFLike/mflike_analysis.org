@@ -77,7 +77,7 @@ Let's plot the chains size for all the simulations
 #+begin_example
   |   Sim. |   mcmc 1 |   mcmc 2 |   mcmc 3 |   mcmc 4 |   total |
   |--------+----------+----------+----------+----------+---------|
-  |      0 |    16681 |    12981 |    16141 |    16161 |   61964 |
+  |      0 |    18821 |    16261 |    18281 |    18041 |   71404 |
   |      1 |    15841 |    18781 |    16921 |    19261 |   70804 |
   |      2 |    17901 |    19821 |    18041 |    14001 |   69764 |
   |      3 |    12361 |    20321 |    13921 |    18861 |   65464 |
@@ -356,7 +356,7 @@ Load the different samples
 #+END_SRC
 
 #+RESULTS:
-[[file:./.ob-jupyter/942e33f71d7a12ae3cde408ab4ce5a067dfd44df.png]]
+[[file:./.ob-jupyter/831875e2335034fe525711c8c377315eb3324939.png]]
 
 
 #+BEGIN_SRC jupyter-python
@@ -364,7 +364,7 @@ Load the different samples
 #+END_SRC
 
 #+RESULTS:
-[[file:./.ob-jupyter/31dbb8ae6a3f21fb03934cde4e9fcdda3ecba7f0.png]]
+[[file:./.ob-jupyter/a76cab0a2996e561e619d1e77243360cd1d96ffb.png]]
 
 ** Nuisance parameters
 #+BEGIN_SRC jupyter-python
@@ -372,7 +372,7 @@ Load the different samples
 #+END_SRC
 
 #+RESULTS:
-[[file:./.ob-jupyter/4a77048d208611e854895958d47103e818afcfa5.png]]
+[[file:./.ob-jupyter/bb9c6be80a0f8e5f72159232c4c059d3836bfd4e.png]]
 
 
 #+BEGIN_SRC jupyter-python
@@ -380,7 +380,7 @@ Load the different samples
 #+END_SRC
 
 #+RESULTS:
-[[file:./.ob-jupyter/93add252acf12e60183b6c111515b9e711281706.png]]
+[[file:./.ob-jupyter/b5af9d061060d1ceb353a3cf6a909f4c79705d43.png]]
 * Miscellaneous
 ** Triangle plot
 Define global plot settings
@@ -433,17 +433,17 @@ Plot posteriors distributions of CMB parameters
 #+END_SRC
 
 #+RESULTS:
-[[file:./.ob-jupyter/c7c62b27828d896b9f5ff701349682c498cfc1b3.png]]
+[[file:./.ob-jupyter/1a8b44ef486d245c3500eb31981a286ef2967b75.png]]
 
 #+BEGIN_SRC jupyter-python
   g.triangle_plot([samples[0], samples[-1]], nuisance_params,
                   filled=True, legend_labels=["TT", "TT, TE, EE"],
-                  colors=["C2", "C3"], diag1d_kwargs={"colors": ["C2", "C3"]})
+                  colors=["C0", "C3"], diag1d_kwargs={"colors": ["C0", "C3"]})
   show_input(g, nuisance_params)
 #+END_SRC
 
 #+RESULTS:
-[[file:./.ob-jupyter/a449f6c090f546e7e3a7435ca7b74a32e78ffab2.png]]
+[[file:./.ob-jupyter/944ccddd3e9ac0eee9b213f68ec12657661532f8.png]]
 
 ** Correlation plot
 
