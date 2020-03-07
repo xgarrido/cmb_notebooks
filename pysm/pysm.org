@@ -96,13 +96,14 @@ We can finally plot the corresponding power spectra
           plot = axes[i].loglog if i == 0 else axes[i].semilogx
           plot(ell, v[i])
           axes[i].legend([], title=cl)
-
+  for ax in axes[3:]:
+    ax.set_xlabel("$\ell$")
   fig.legend(cls.keys(), loc='upper center', bbox_to_anchor=(0.5, 1.05), ncol=3)
   plt.tight_layout()
 #+END_SRC
 
 #+RESULTS:
-[[file:./.ob-jupyter/1c7088401a5a67c0df0b76afd7206cd9968adeaf.png]]
+[[file:./.ob-jupyter/1f3ca8aa88aa24e2766cd167f77154e2db8d96d5.png]]
 
 * Comparing models
 ** SO mask
@@ -118,22 +119,54 @@ First, we grab the galatic and the SO survey masks both in equatorian coordinate
 #+RESULTS:
 [[file:./.ob-jupyter/377d47a0259a6551ad4f2ff57e024c4b722fa517.png]]
 
-Rotate mask into galactic coordinates and apply 5 degrees smoothing
+Since =pysm= generates maps in galactic coordinates and we do not want to rotate each of them, we
+rotate the mask into galactic coordinates and apply 5 degrees smoothing
 #+BEGIN_SRC jupyter-python
   input_map = galactic_mask*survey_mask
-  mask = pysm.apply_smoothing_and_coord_transform(input_map, rot=hp.Rotator(coord="EG"), fwhm=5*u.deg)
-  hp.mollview(mask, title=None)
+  mask = pysm.apply_smoothing_and_coord_transform(input_map,
+                                                  rot=hp.Rotator(coord="EG"),
+                                                  fwhm=5*u.deg)
+  hp.mollview(mask, title=None, min=0)
 #+END_SRC
 
 #+RESULTS:
-[[file:./.ob-jupyter/377c1b597663c7f2d30f21fb2ba69e565b543b04.png]]
+[[file:./.ob-jupyter/be9999dd3146d75af99f7f0480953b6ff5297939.png]]
 
-Let's try to mask the dust emission for instance and see the remanant emission at 100 GHz
+Let's try to mask the dust emission for instance and see the remnant emission at 100 GHz
 #+BEGIN_SRC jupyter-python
   sky = pysm.Sky(nside=1024, preset_strings=["d1"], output_unit=u.uK_CMB)
   map_100GHz = sky.get_emission(100 * u.GHz)
-  hp.mollview(mask * map_100GHz[0])
+  hp.mollview(mask * map_100GHz[0], min=0, max=100, title="I map")
+  hp.mollview(mask * map_100GHz[1], min=0, max=10, title="Q map")
+  hp.mollview(mask * map_100GHz[2], min=0, max=10, title="U map")
 #+END_SRC
 
 #+RESULTS:
-[[file:./.ob-jupyter/10d0fe1603543b75430d42c48cab1d6b3034e9b0.png]]
+:RESULTS:
+[[file:./.ob-jupyter/380defaf160664dead5ad527344d8c05f0405907.png]]
+[[file:./.ob-jupyter/29a477453c3929958f0cbcbd63f3b3766c3aea73.png]]
+[[file:./.ob-jupyter/dc70e4ab090d44d16be9fddd9c389e4929cb00e7.png]]
+:END:
+
+The corresponding $C_\ell$ are computed with =healpy.anafast= function
+#+BEGIN_SRC jupyter-python
+  cls = hp.anafast(map_100GHz)
+#+END_SRC
+
+which looks like
+#+BEGIN_SRC jupyter-python
+  fig, axes = plt.subplots(2, 3, figsize=(12, 6), sharex=True)
+  axes = axes.flatten()
+
+  ell = np.arange(cls.shape[1])
+  for i, cl in enumerate(["TT", "EE", "BB", "TE", "EB", "TB"]):
+      plot = axes[i].loglog if i == 0 else axes[i].semilogx
+      plot(ell, cls[i])
+      axes[i].legend([], title=cl)
+  for ax in axes[3:]:
+    ax.set_xlabel("$\ell$")
+  plt.tight_layout()
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/b6f17b101cc4843bcc7a2268ac3330470a3ef2fd.png]]
