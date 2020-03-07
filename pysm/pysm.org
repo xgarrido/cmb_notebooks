@@ -76,7 +76,6 @@ We can also show the I, Q, U maps for the two different models
         hp.mollview(sky_map[j],
                     min=vmin, max=vmax,
                     cbar=False,
-                    unit=sky_map.unit,
                     title="{} - {}".format(spec, model),
                     sub=(3, 3, 3*i+j+1))
 #+END_SRC
@@ -134,7 +133,8 @@ rotate the mask into galactic coordinates and apply 5 degrees smoothing
 
 Let's try to mask the dust emission for instance and see the remnant emission at 100 GHz
 #+BEGIN_SRC jupyter-python
-  sky = pysm.Sky(nside=1024, preset_strings=["d1"], output_unit=u.uK_CMB)
+  nside = 1024
+  sky = pysm.Sky(nside=nside, preset_strings=["d1"], output_unit=u.uK_CMB)
   map_100GHz = sky.get_emission(100 * u.GHz)
   hp.mollview(mask * map_100GHz[0], min=0, max=100, title="I map")
   hp.mollview(mask * map_100GHz[1], min=0, max=10, title="Q map")
@@ -149,7 +149,7 @@ Let's try to mask the dust emission for instance and see the remnant emission at
 :END:
 
 The corresponding $C_\ell$ are computed with =healpy.anafast= function
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC jupyter-python :results none
   cls = hp.anafast(map_100GHz)
 #+END_SRC
 
@@ -170,3 +170,47 @@ which looks like
 
 #+RESULTS:
 [[file:./.ob-jupyter/b6f17b101cc4843bcc7a2268ac3330470a3ef2fd.png]]
+
+** CMB spectra
+Using [[https://camb.readthedocs.io/en/latest/][CAMB]] and a set of cosmological parameters, we can produce $C_\ell$ for the different spectra
+#+BEGIN_SRC jupyter-python :results none
+  import camb
+  ell_max = ell[-1]
+  cosmo_params = {
+      "H0": 67.5,
+      "As": 1e-10*np.exp(3.044),
+      "ombh2": 0.02237,
+      "omch2": 0.1200,
+      "ns": 0.9649,
+      "Alens": 1.0,
+      "tau": 0.0544
+  }
+  pars = camb.set_params(**cosmo_params)
+  pars.set_for_lmax(ell_max, lens_potential_accuracy=1)
+  results = camb.get_results(pars)
+  powers = results.get_cmb_power_spectra(pars, CMB_unit="muK")
+#+END_SRC
+
+and plot the results
+#+BEGIN_SRC jupyter-python
+  spectra = ["tt", "ee", "bb", "te"]
+  dls_camb = {spec: powers["total"][:ell_max+1, i] for i, spec in enumerate(spectra)}
+
+  fig, axes = plt.subplots(2, 2, sharex=True, figsize=(8, 6))
+  axes[0, 0].set_yscale("log")
+  axes = axes.flatten()
+
+  norm = ell * (ell + 1) / (2 * np.pi)
+  for i, (spec, dl) in enumerate(dls_camb.items()):
+      axes[i].plot(ell, dl, "tab:gray", label="CMB")
+      axes[i].plot(ell, cls[i] * norm, "tab:red", label="dust")
+      axes[i].legend(title=spec.upper())
+
+  axes[0].set_ylabel(r"$D_\ell$")
+  axes[2].set_ylabel(r"$D_\ell$")
+  for ax in axes[2:]: ax.set_xlabel(r"$\ell$")
+  plt.tight_layout()
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/2dbe9b2a823801efc9bd480caea1470c8f8bb789.png]]
