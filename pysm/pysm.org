@@ -21,17 +21,20 @@ Matplotlib magic
   import healpy as hp
   import matplotlib.pyplot as plt
   import numpy as np
+  import pspy
   import pysm
   import pysm.units as u
   print(" healpy :", hp.__version__)
   print("  numpy :", np.__version__)
   print("   pysm :", pysm.__version__)
+  print("   pspy :", pspy.__version__)
 #+END_SRC
 
 #+RESULTS:
 :  healpy : 1.13.0
 :   numpy : 1.18.1
 :    pysm : 3.1.dev262
+:    pspy : 1.2.0+35.g2d4bd09
 
 * Getting started
 
@@ -104,78 +107,78 @@ We can finally plot the corresponding power spectra
 #+RESULTS:
 [[file:./.ob-jupyter/1f3ca8aa88aa24e2766cd167f77154e2db8d96d5.png]]
 
-* Comparing models
-** SO mask
-First, we grab the galatic and the SO survey masks both in equatorian coordinates with =nside=1024=
+* Comparing =pspy= to =healpy.anafast=
+
+Here we check for CMB data, how calculation of power spectra with =pspy= differs from the one of
+=healpy.anafast= which does not take care of mask. We also look how =pspy= behaves wrt to the number of
+iterations.
+
+** Convert mask to galactic coordinates                           :noexport:
 #+BEGIN_SRC jupyter-python
-  galactic_mask = np.load("./masks/mask_equatorial_1024.npz")["mask"]
-  survey_mask = np.load("./masks/survey_mask_1024.npz")["mask"]
+  def equatorial_to_galactic(input_map):
+    nside = hp.get_nside(input_map)
+    alm = hp.map2alm(input_map)
+    rot = hp.Rotator(coord="CG")
+    rot.rotate_alm(alm, inplace=True)
+    mask = hp.alm2map(alm, nside=nside)
+    return np.where(mask < 0.5, 0, 1)
+#+END_SRC
+
+** Definining mask
+Masks are defined in galactic coordinates for later use with =pysm=. Everything is done with
+=nside=1024=.
+#+BEGIN_SRC jupyter-python
+  nside = 1024
+  galactic_mask = np.load("./masks/mask_galactic_1024.npz")["mask"]
+  survey_mask = np.load("./masks/mask_survey_1024.npz")["mask"]
+  mask = galactic_mask * survey_mask
   plt.figure(figsize=(12, 4))
   hp.mollview(galactic_mask, title="Galactic", sub=(1, 2, 1))
   hp.mollview(survey_mask, title="Survey", sub=(1, 2, 2))
 #+END_SRC
 
 #+RESULTS:
-[[file:./.ob-jupyter/377d47a0259a6551ad4f2ff57e024c4b722fa517.png]]
+[[file:./.ob-jupyter/cdfa154888fc945a7290e56ec47a02125edd9f65.png]]
 
-Since =pysm= generates maps in galactic coordinates and we do not want to rotate each of them, we
-rotate the mask into galactic coordinates and apply 5 degrees smoothing
-#+BEGIN_SRC jupyter-python
-  input_map = galactic_mask*survey_mask
-  mask = pysm.apply_smoothing_and_coord_transform(input_map,
-                                                  rot=hp.Rotator(coord="EG"),
-                                                  fwhm=5*u.deg)
-  hp.mollview(mask, title=None, min=0)
-#+END_SRC
-
-#+RESULTS:
-[[file:./.ob-jupyter/be9999dd3146d75af99f7f0480953b6ff5297939.png]]
-
-Let's try to mask the dust emission for instance and see the remnant emission at 100 GHz
-#+BEGIN_SRC jupyter-python
-  nside = 1024
-  sky = pysm.Sky(nside=nside, preset_strings=["d1"], output_unit=u.uK_CMB)
-  map_100GHz = sky.get_emission(100 * u.GHz)
-  hp.mollview(mask * map_100GHz[0], min=0, max=100, title="I map")
-  hp.mollview(mask * map_100GHz[1], min=0, max=10, title="Q map")
-  hp.mollview(mask * map_100GHz[2], min=0, max=10, title="U map")
-#+END_SRC
-
-#+RESULTS:
-:RESULTS:
-[[file:./.ob-jupyter/380defaf160664dead5ad527344d8c05f0405907.png]]
-[[file:./.ob-jupyter/29a477453c3929958f0cbcbd63f3b3766c3aea73.png]]
-[[file:./.ob-jupyter/dc70e4ab090d44d16be9fddd9c389e4929cb00e7.png]]
-:END:
-
-The corresponding $C_\ell$ are computed with =healpy.anafast= function
+Given the two masks, we create a =so_map= object to store the survey
 #+BEGIN_SRC jupyter-python :results none
-  cls = hp.anafast(map_100GHz)
+  from pspy import so_map
+  survey = so_map.healpix_template(ncomp=1, nside=nside)
+  survey.data = mask
 #+END_SRC
-
-which looks like
+and we apodize it with circular beam of 5 degree
 #+BEGIN_SRC jupyter-python
-  fig, axes = plt.subplots(2, 3, figsize=(12, 6), sharex=True)
-  axes = axes.flatten()
-
-  ell = np.arange(cls.shape[1])
-  for i, cl in enumerate(["TT", "EE", "BB", "TE", "EB", "TB"]):
-      plot = axes[i].loglog if i == 0 else axes[i].semilogx
-      plot(ell, cls[i])
-      axes[i].legend([], title=cl)
-  for ax in axes[3:]:
-    ax.set_xlabel("$\ell$")
-  plt.tight_layout()
+  from pspy import so_window
+  survey = so_window.create_apodization(survey, apo_type="C1", apo_radius_degree=5)
+  hp.mollview(survey.data, title=None)
 #+END_SRC
 
 #+RESULTS:
-[[file:./.ob-jupyter/b6f17b101cc4843bcc7a2268ac3330470a3ef2fd.png]]
+[[file:./.ob-jupyter/40a04e29b75da1bde6dfe7649b2a73d22d6db027.png]]
+
+** Create binning file and MCM computation
+We first create a binning file
+#+BEGIN_SRC jupyter-python :results none
+  import os
+  output_dir = "/tmp/pysm"
+  os.makedirs(output_dir, exist_ok=True)
+  binning_file = os.path.join(output_dir, "binning.dat")
+  from pspy import pspy_utils
+  pspy_utils.create_binning_file(bin_size=40, n_bins=100, file_name=binning_file)
+#+END_SRC
+
+Comptutation of matrix coupling mode and Bbl are done for different number of iterations
+#+BEGIN_SRC jupyter-python :results none
+  window = (survey, survey)
+  lmax = 3 * nside - 1
+  from pspy import so_mcm
+  mcms = [so_mcm.mcm_and_bbl_spin0and2(window, binning_file, lmax=lmax, type="Dl", niter=n) for n in range(4)]
+#+END_SRC
 
 ** CMB spectra
 Using [[https://camb.readthedocs.io/en/latest/][CAMB]] and a set of cosmological parameters, we can produce $C_\ell$ for the different spectra
 #+BEGIN_SRC jupyter-python :results none
   import camb
-  ell_max = ell[-1]
   cosmo_params = {
       "H0": 67.5,
       "As": 1e-10*np.exp(3.044),
@@ -185,32 +188,157 @@ Using [[https://camb.readthedocs.io/en/latest/][CAMB]] and a set of cosmological
       "Alens": 1.0,
       "tau": 0.0544
   }
+  ell_camb_min, ell_camb_max = 2, 10**4
   pars = camb.set_params(**cosmo_params)
-  pars.set_for_lmax(ell_max, lens_potential_accuracy=1)
+  pars.set_for_lmax(ell_camb_max, lens_potential_accuracy=1)
   results = camb.get_results(pars)
   powers = results.get_cmb_power_spectra(pars, CMB_unit="muK")
+
+  ell_camb = np.arange(ell_camb_min, ell_camb_max)
+  cl_file = os.path.join(output_dir, "cl_camb.dat")
+  np.savetxt(cl_file,
+             np.hstack([ell_camb[:, np.newaxis], powers["total"][ell_camb_min:ell_camb_max]]))
 #+END_SRC
 
-and plot the results
+Fro sanity checks, we can show the power spectra
 #+BEGIN_SRC jupyter-python
-  spectra = ["tt", "ee", "bb", "te"]
-  dls_camb = {spec: powers["total"][:ell_max+1, i] for i, spec in enumerate(spectra)}
+  dl_dict = {k: powers["total"][ell_camb_min:ell_camb_max, v]
+             for k, v in {"tt": 0, "ee": 1, "te": 3, "bb": 2}.items()}
+  fig, axes = plt.subplots(2, 1, sharex=True, figsize=(6, 8))
+  axes[0].set_yscale("log")
+  for i, spec in enumerate(dl_dict.keys()):
+      ax = axes[1] if spec == "te" else axes[0]
+      ax.plot(ell_camb, dl_dict[spec], "-C{}".format(i), label=spec.upper())
 
-  fig, axes = plt.subplots(2, 2, sharex=True, figsize=(8, 6))
-  axes[0, 0].set_yscale("log")
-  axes = axes.flatten()
+  for ax in axes:
+      ax.set_ylabel(r"$D_\ell$")
+      ax.legend()
+      axes[1].set_xlabel(r"$\ell$")
+      plt.tight_layout()
 
-  norm = ell * (ell + 1) / (2 * np.pi)
-  for i, (spec, dl) in enumerate(dls_camb.items()):
-      axes[i].plot(ell, dl, "tab:gray", label="CMB")
-      axes[i].plot(ell, cls[i] * norm, "tab:red", label="dust")
-      axes[i].legend(title=spec.upper())
+#+END_SRC
 
-  axes[0].set_ylabel(r"$D_\ell$")
-  axes[2].set_ylabel(r"$D_\ell$")
-  for ax in axes[2:]: ax.set_xlabel(r"$\ell$")
+#+RESULTS:
+[[file:./.ob-jupyter/e90b2107eb05f11c63145f133fba11872d7e9ec8.png]]
+
+Given the $C_\ell$, we can now generate a CMB map
+#+BEGIN_SRC jupyter-python :results none
+  tmpl = so_map.healpix_template(ncomp=3, nside=nside)
+  cmb = tmpl.synfast(cl_file)
+#+END_SRC
+and show the intensity map with the mask
+#+BEGIN_SRC jupyter-python
+  hp.mollview(cmb.data[0]*survey.data, title=None)
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/f577c3265b792096193f89d942122cb7c7c1acac.png]]
+
+
+
+Now, we can compute alm
+#+BEGIN_SRC jupyter-python :results none
+  spectra = ["TT", "TE", "TB", "ET", "BT", "EE", "EB", "BE", "BB"]
+  Db_dict = {}
+  for n in range(4):
+      from pspy import sph_tools
+      alm = sph_tools.get_alms(cmb, window, niter=n, lmax=lmax)
+
+      from pspy import so_spectra
+      Db_dict[n] = so_spectra.bin_spectra(*so_spectra.get_spectra(alm, spectra=spectra),
+                                          binning_file,
+                                          lmax,
+                                          type="Dl",
+                                          mbb_inv=mcms[n][0],
+                                          spectra=spectra)
+#+END_SRC
+and plot the power spectra for the different number of iterations.
+#+BEGIN_SRC jupyter-python
+  from pspy import pspy_utils
+  ell_theory, ps_theory = pspy_utils.ps_lensed_theory_to_dict(cl_file, "Dl", lmax=lmax)
+
+  fig, axes = plt.subplots(2, 3, figsize=(15, 8), sharex=True)
+  ax = axes.flatten()
+  for i, spec in enumerate(["TT", "EE", "BB", "TE", "EB", "TB"]):
+      for n, v in Db_dict.items():
+          l, ps = v[0], v[1][spec]
+          ps_theory_b = so_mcm.apply_Bbl(mcms[n][1], ps_theory, spectra=spectra)
+          ax[i].plot(l, ps, "-C{}".format(n), label="n = {}".format(n))
+          # ax[i].plot(l, ps_theory_b[spec], "-C{}".format(n), label="n = {}".format(n))
+      # ax[i].plot(lb, ps_theory_b[spec], "o", color="tab:red", label="binned theory")
+      ax[i].plot(ell_theory, ps_theory[spec], color="gray", label="theory")
+      ax[i].set_ylabel(r'$D^{%s}_{\ell}$'%spec, fontsize=20)
+      if i==0:
+          fig.legend(loc="upper left", bbox_to_anchor=(1,1))
+
+  for ax in axes[-1]:
+      ax.set_xlabel(r'$\ell$',fontsize=20)
   plt.tight_layout()
 #+END_SRC
 
 #+RESULTS:
-[[file:./.ob-jupyter/2dbe9b2a823801efc9bd480caea1470c8f8bb789.png]]
+[[file:./.ob-jupyter/d6709e37108a2c53413843642dfe19ece5d4fca8.png]]
+
+For a number of iteration of 3, we can now compare =pspy= computation of power spectra  with
+=healpy.anafast=. As a reminder, =healpy.anafast= does not take into account the mask and is only
+reliable for full sky. We compute the $C_\ell$ /via/ =anafast= with and without mask
+#+BEGIN_SRC jupyter-python :results none
+  cls_ana = hp.anafast(cmb.data)
+  cls_ana_masked = hp.anafast(survey.data * cmb.data)
+#+END_SRC
+and let's plot them together with the =pspy= computation
+#+BEGIN_SRC jupyter-python
+  fig, axes = plt.subplots(2, 3, figsize=(15, 8), sharex=True)
+  ax = axes.flatten()
+  for i, spec in enumerate(["TT", "EE", "BB", "TE", "EB", "TB"]):
+      l = np.arange(cls_ana[i].shape[0])
+      norm = l * (l + 1) / (2 * np.pi)
+      ax[i].plot(l, cls_ana[i] * norm, "0.5", label="anafast")
+      ax[i].plot(l, cls_ana_masked[i] * norm, "0.75", label="anafast with mask")
+      ax[i].set_ylabel(r'$D^{%s}_{\ell}$'%spec, fontsize=20)
+      n = 3
+      l, ps = Db_dict[n][0], Db_dict[n][1][spec]
+      ax[i].plot(l, ps, "tab:red", label="pspy - n = {}".format(n))
+      if i == 0:
+          fig.legend(loc="upper left", bbox_to_anchor=(1,1))
+
+  for ax in axes[-1]:
+      ax.set_xlabel(r'$\ell$',fontsize=20)
+  plt.tight_layout()
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/0f34f8b42754281c449f2fc51bde6f0560b590f1.png]]
+
+* Comparing galactic emission models
+
+** Defining mask
+Since =pysm= generates maps in galactic coordinates and we do not want to rotate each of the, we grab
+the galatic and the SO survey masks both in galactic coordinates with =nside=1024=
+#+BEGIN_SRC jupyter-python
+  nside = 1024
+  galactic_mask = np.load("./masks/mask_galactic_1024.npz")["mask"]
+  survey_mask = np.load("./masks/mask_survey_1024.npz")["mask"]
+  mask = galactic_mask * survey_mask
+  plt.figure(figsize=(12, 4))
+  hp.mollview(galactic_mask, title="Galactic", sub=(1, 2, 1))
+  hp.mollview(survey_mask, title="Survey", sub=(1, 2, 2))
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/cdfa154888fc945a7290e56ec47a02125edd9f65.png]]
+
+
+
+Let's try to mask the dust emission for instance and see the remnant emission at 100 GHz
+#+BEGIN_SRC jupyter-python
+  sky = pysm.Sky(nside=nside, preset_strings=["d1"], output_unit=u.uK_CMB)
+  map_100GHz = sky.get_emission(100 * u.GHz)
+  plt.figure(figsize=(18, 4))
+  hp.mollview(mask * map_100GHz[0], min=0, max=100, title="I map", sub=(1, 3, 1))
+  hp.mollview(mask * map_100GHz[1], min=0, max=10, title="Q map", sub=(1, 3, 2))
+  hp.mollview(mask * map_100GHz[2], min=0, max=10, title="U map", sub=(1, 3, 3))
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/a3d03cadc963298c1c607cfce5593f87760595fb.png]]
