@@ -1,7 +1,7 @@
 #+TITLE: Using & testing pysm3
 #+PROPERTY: header-args:jupyter-python :session pysm
 #+PROPERTY: header-args :exports both
-#+PROPERTY: header-args :tangle pysm.py
+#+PROPERTY: header-args :tangle pysm_script.py
 
 This notebook provides some analysis snippets for extragalactic foregounds computation with =pysm3=
 
@@ -33,10 +33,13 @@ Matplotlib magic
 #+RESULTS:
 :  healpy : 1.13.0
 :   numpy : 1.18.1
-:    pysm : 3.1.dev262
+:    pysm : 3.1.dev265
 :    pspy : 1.2.0+35.g2d4bd09
 
 * Getting started
+:PROPERTIES:
+:HEADER-ARGS: :tangle no
+:END:
 
 This is a basic copy-paste of =pysm3= [[https://pysm3.readthedocs.io/en/latest/basic_use.html][tutorials]]. Here we consider dust (=d1= model) and synchrotron (=s1=)
 emission.
@@ -108,7 +111,9 @@ We can finally plot the corresponding power spectra
 [[file:./.ob-jupyter/1f3ca8aa88aa24e2766cd167f77154e2db8d96d5.png]]
 
 * Comparing =pspy= to =healpy.anafast=
-
+:PROPERTIES:
+:HEADER-ARGS: :tangle no
+:END:
 Here we check for CMB data, how calculation of power spectra with =pspy= differs from the one of
 =healpy.anafast= which does not take care of mask. We also look how =pspy= behaves wrt to the number of
 iterations.
@@ -311,7 +316,6 @@ and let's plot them together with the =pspy= computation
 [[file:./.ob-jupyter/0f34f8b42754281c449f2fc51bde6f0560b590f1.png]]
 
 * Comparing galactic emission models
-
 ** Defining mask
 Since =pysm= generates maps in galactic coordinates and we do not want to rotate each of the, we grab
 the galatic and the SO survey masks both in galactic coordinates with =nside=1024=
@@ -328,17 +332,241 @@ the galatic and the SO survey masks both in galactic coordinates with =nside=102
 #+RESULTS:
 [[file:./.ob-jupyter/cdfa154888fc945a7290e56ec47a02125edd9f65.png]]
 
+If we want bigger =nside=, we can upgrade the map
+#+BEGIN_SRC jupyter-python
+  mask = hp.ud_grade(mask, nside_out=nside)
+  assert np.all((mask == 0) | (mask == 1)), "Some pixels have value != 0 or 1"
+#+END_SRC
 
+#+RESULTS:
+
+Given the two masks, we create a =so_map= object to store the survey
+#+BEGIN_SRC jupyter-python :results none
+  from pspy import so_map
+  survey = so_map.healpix_template(ncomp=1, nside=nside)
+  survey.data = mask
+#+END_SRC
+and we apodize it with circular beam of 5 degree
+#+BEGIN_SRC jupyter-python
+  from pspy import so_window
+  survey = so_window.create_apodization(survey, apo_type="C1", apo_radius_degree=5)
+  hp.mollview(survey.data, title=None)
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/40a04e29b75da1bde6dfe7649b2a73d22d6db027.png]]
 
 Let's try to mask the dust emission for instance and see the remnant emission at 100 GHz
 #+BEGIN_SRC jupyter-python
   sky = pysm.Sky(nside=nside, preset_strings=["d1"], output_unit=u.uK_CMB)
   map_100GHz = sky.get_emission(100 * u.GHz)
   plt.figure(figsize=(18, 4))
-  hp.mollview(mask * map_100GHz[0], min=0, max=100, title="I map", sub=(1, 3, 1))
-  hp.mollview(mask * map_100GHz[1], min=0, max=10, title="Q map", sub=(1, 3, 2))
-  hp.mollview(mask * map_100GHz[2], min=0, max=10, title="U map", sub=(1, 3, 3))
+  hp.mollview(survey.data * map_100GHz[0], min=0, max=100, title="I map", sub=(1, 3, 1))
+  hp.mollview(survey.data * map_100GHz[1], min=0, max=10, title="Q map", sub=(1, 3, 2))
+  hp.mollview(survey.data * map_100GHz[2], min=0, max=10, title="U map", sub=(1, 3, 3))
 #+END_SRC
 
 #+RESULTS:
-[[file:./.ob-jupyter/a3d03cadc963298c1c607cfce5593f87760595fb.png]]
+[[file:./.ob-jupyter/3bcc9db2f5206ca298c3ab9cc450fb427ce41776.png]]
+
+** Create binning file and MCM computation
+We first create a binning file
+#+BEGIN_SRC jupyter-python :results none
+  import os
+  output_dir = "/tmp/pysm"
+  os.makedirs(output_dir, exist_ok=True)
+  binning_file = os.path.join(output_dir, "binning.dat")
+  from pspy import pspy_utils
+  pspy_utils.create_binning_file(bin_size=40, n_bins=1000, file_name=binning_file)
+#+END_SRC
+
+Comptutation of matrix coupling mode and Bbl are done for different number of iterations
+#+BEGIN_SRC jupyter-python :results none :async yes
+  window = (survey, survey)
+  lmax = 3 * nside - 1
+  niter = 3
+  from pspy import so_mcm
+  mbb_inv, bbl = so_mcm.mcm_and_bbl_spin0and2(window,
+                                              binning_file,
+                                              lmax=lmax,
+                                              type="Dl",
+                                              niter=niter)
+#+END_SRC
+
+** Defining models & frequencies
+#+BEGIN_SRC jupyter-python :results none
+  dust = ["d0", "d1", "d2", "d4", "d6"]  # "d5"
+  synchrotron = ["s1", "s2", "s3"]
+  ame = ["a1", "a2"]
+  free_free = ["f1"]
+
+  presets = dust + synchrotron + ame + free_free
+  frequencies = [93, 145, 225]
+
+  store_map = False
+  store_alms = False
+  store_spectra = True
+#+END_SRC
+
+** Compute emission maps, alms and spectra
+#+BEGIN_SRC jupyter-python :async yes
+  models = {k: {} for k in presets}
+
+  from itertools import product
+  for preset, freq in product(presets, frequencies):
+    print("Computing {} model @ {} GHz".format(preset, freq))
+
+    # Get emission map
+    sky = pysm.Sky(nside=nside, preset_strings=[preset], output_unit=u.uK_CMB)
+    emission = sky.get_emission(freq * u.GHz)
+
+    # Compute alm
+    from pspy import sph_tools
+    tmpl = so_map.healpix_template(ncomp=3, nside=nside)
+    tmpl.data = emission.value
+    alms = sph_tools.get_alms(tmpl, window, niter=niter, lmax=lmax)
+
+    # Compute spectra
+    from pspy import so_spectra
+    spectra = ["TT", "TE", "TB", "ET", "BT", "EE", "EB", "BE", "BB"]
+    db = so_spectra.bin_spectra(*so_spectra.get_spectra(alms, spectra=spectra),
+                                binning_file,
+                                lmax=lmax,
+                                type="Dl",
+                                mbb_inv=mbb_inv,
+                                spectra=spectra)
+    models[preset][freq] = {"spectra": db}
+
+    if store_map:
+      models[preset][freq].update({"map": emission})
+    if store_alms:
+      models[preset][freq].update({"alms": alms})
+
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+  Computing d0 model @ 93.0 GHz GHz
+  Computing d0 model @ 145.0 GHz GHz
+  Computing d0 model @ 225.0 GHz GHz
+  Computing d1 model @ 93.0 GHz GHz
+  Computing d1 model @ 145.0 GHz GHz
+  Computing d1 model @ 225.0 GHz GHz
+  Computing d2 model @ 93.0 GHz GHz
+  Computing d2 model @ 145.0 GHz GHz
+  Computing d2 model @ 225.0 GHz GHz
+  Computing d4 model @ 93.0 GHz GHz
+  Computing d4 model @ 145.0 GHz GHz
+  Computing d4 model @ 225.0 GHz GHz
+  Computing d6 model @ 93.0 GHz GHz
+  Computing d6 model @ 145.0 GHz GHz
+  Computing d6 model @ 225.0 GHz GHz
+  Computing s1 model @ 93.0 GHz GHz
+  Computing s1 model @ 145.0 GHz GHz
+  Computing s1 model @ 225.0 GHz GHz
+  Computing s2 model @ 93.0 GHz GHz
+  Computing s2 model @ 145.0 GHz GHz
+  Computing s2 model @ 225.0 GHz GHz
+  Computing s3 model @ 93.0 GHz GHz
+  Computing s3 model @ 145.0 GHz GHz
+  Computing s3 model @ 225.0 GHz GHz
+  Computing a1 model @ 93.0 GHz GHz
+  Computing a1 model @ 145.0 GHz GHz
+  Computing a1 model @ 225.0 GHz GHz
+  Computing a2 model @ 93.0 GHz GHz
+  /home/garrido/Workdir/CMB/development/pysm/software/pysm/models/template.py:194: UserWarning: No physical unit associated with file /home/garrido/.astropy/cache/download/py3/6d109847b43f9d9e40f0301031194286
+    warnings.warn("No physical unit associated with file " + str(path))
+  /home/garrido/Workdir/CMB/development/pysm/software/pysm/models/template.py:194: UserWarning: No physical unit associated with file /home/garrido/.astropy/cache/download/py3/24e4f022b8fd1e7ba0278d56e4bfb719
+    warnings.warn("No physical unit associated with file " + str(path))
+  Computing a2 model @ 145.0 GHz GHz
+  /home/garrido/Workdir/CMB/development/pysm/software/pysm/models/template.py:194: UserWarning: No physical unit associated with file /home/garrido/.astropy/cache/download/py3/6d109847b43f9d9e40f0301031194286
+    warnings.warn("No physical unit associated with file " + str(path))
+  /home/garrido/Workdir/CMB/development/pysm/software/pysm/models/template.py:194: UserWarning: No physical unit associated with file /home/garrido/.astropy/cache/download/py3/24e4f022b8fd1e7ba0278d56e4bfb719
+    warnings.warn("No physical unit associated with file " + str(path))
+  Computing a2 model @ 225.0 GHz GHz
+  Computing f1 model @ 93.0 GHz GHz
+  Computing f1 model @ 145.0 GHz GHz
+  Computing f1 model @ 225.0 GHz GHz
+#+end_example
+
+#+BEGIN_SRC jupyter-python
+  import pickle
+  pickle.dump(models, open("./models_1024.pkl", "wb"))
+#+END_SRC
+
+#+RESULTS:
+
+*** Plotting spectra
+#+BEGIN_SRC jupyter-python :results none
+  def plot_spectra(models=models, spec="TT", lmax=lmax):
+      nfreq = len(frequencies)
+      fig, axes = plt.subplots(4, nfreq, sharex=True, sharey="row", figsize=(15, 12))
+      if spec in ["TT", "EE", "BB"]:
+          [ax.set_yscale("log") for ax in axes.flatten()]
+
+      def _plot_spectra(submodels, row_number):
+          for i, (model, freq) in enumerate(product(submodels, frequencies)):
+              lb, db = models[model][freq].get("spectra")
+              axes[row_number, i%3].plot(lb, db[spec], label=model)
+
+      # Show CMB
+      for ax in axes.flatten():
+          ax.plot(ell_camb, dl_dict[spec.lower()], "gray", label="CMB")
+          ax.set_xlim(0, lmax)
+
+      names = {"dust": dust, "synchrotron": synchrotron, "AME": ame, "free-free": free_free}
+      for i, submodel in enumerate(names.values()):
+          _plot_spectra(submodel, i)
+
+      for ax, name in zip(axes[:, -1], names.keys()):
+          leg = ax.legend(title="{} - {}".format(spec, name), bbox_to_anchor=(1, 1), loc="upper left")
+          leg._legend_box.align = "left"
+
+      for ax in axes[:, 0]:
+          ax.set_ylabel(r"$D_\ell$")
+      for ax in axes[-1]:
+          ax.set_xlabel(r"$\ell$")
+
+      for ax, freq in zip(axes[0], frequencies):
+          ax.set_title("{} GHz".format(freq))
+      plt.tight_layout()
+#+END_SRC
+
+#+BEGIN_SRC jupyter-python
+  plot_spectra()
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/86df1d6a815af6cd386e03f620a69ad9b9089177.png]]
+
+#+BEGIN_SRC jupyter-python
+  nside = 4096
+  plot_spectra(spec="TT",
+               models=pickle.load(open("./models_{}.pkl".format(nside), "rb")),
+               lmax=3*nside-1)
+#+END_SRC
+
+
+#+RESULTS:
+[[file:./.ob-jupyter/a45d85d27643f0af7092f62e3aaa14e58cf65855.png]]
+
+*** Plotting maps
+#+BEGIN_SRC jupyter-python
+  frequency = 93
+  I, Q, U = 0, 1, 2
+  select = I
+
+  ncols = len(frequencies)
+  nrows = len(presets)
+
+  fig = plt.figure(figsize=(18, 5*nrows), num=0)
+  # fig.suptitle("coucou")
+  i = 1
+  for model, preset in models.items():
+      for freq in frequencies:
+          hp.mollview(preset[freq].get("map")[select], min=0, max=100, sub=(nrows, ncols, i), title=None, cbar=False)
+          i += 1
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/2c12b0f8e58a73d49fa82cc9abb0e24ef05671e6.png]]
