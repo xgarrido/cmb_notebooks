@@ -560,10 +560,10 @@ will finally compute the auto and cross spectra.
 
 ** Power spectra matrices
 
-We will first create a foreground matrix from the foreground power spectra computed in [[Generation of
-foregrounds]] section. The final matrix will have a =[nfreq, nfreq, ell]= shape to get correlated
-foregrounds over different frequency channels and everything must be in raw-\(C_\ell\) /i.e./ we
-multiply foreground value by \(2\pi/(\ell(\ell+1)\). Only foregrounds for temperature are considered.
+We will first create a foreground matrix from the foreground power spectra computed in previous
+section. The final matrix will have a =[nfreq, nfreq, ell]= shape to get correlated foregrounds over
+different frequency channels and everything must be in raw-\(C_\ell\) /i.e./ we multiply foreground
+value by \(2\pi/(\ell(\ell+1)\). Only foregrounds for temperature are considered.
 #+BEGIN_SRC jupyter-python :results none
   nfreqs = len(frequencies["LAT"])
   ps_fg = np.zeros((nfreqs, nfreqs, ell_max))

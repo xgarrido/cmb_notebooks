@@ -34,7 +34,7 @@ Matplotlib magic
 :  healpy : 1.13.0
 :   numpy : 1.18.1
 :    pysm : 3.1.dev265
-:    pspy : 1.2.0+35.g2d4bd09
+:    pspy : 1.2.1+5.gd9ad740
 
 * Getting started
 :PROPERTIES:
@@ -67,13 +67,13 @@ We can also show the I, Q, U maps for the two different models
   sky = pysm.Sky(nside=128, preset_strings=presets)
 
   frequency = 100 * u.GHz
-  def µK_to_µCMB(sky_map):
+  def µKRJ_to_µKCMB(sky_map):
     return sky_map.to(u.uK_CMB, equivalencies=u.cmb_equivalencies(frequency))
 
   sky_maps = {"Model '{}'".format(model):
-              µK_to_µCMB(sky.components[i].get_emission(frequency))
+              µKRJ_to_µKCMB(sky.components[i].get_emission(frequency))
               for i, model in enumerate(presets)}
-  sky_maps["+".join(presets)] = µK_to_µCMB(sky.get_emission(frequency))
+  sky_maps["+".join(presets)] = µKRJ_to_µKCMB(sky.get_emission(frequency))
 
   plt.figure(figsize=(12, 6))
   for i, (model, sky_map) in enumerate(sky_maps.items()):
@@ -358,16 +358,17 @@ and we apodize it with circular beam of 5 degree
 
 Let's try to mask the dust emission for instance and see the remnant emission at 100 GHz
 #+BEGIN_SRC jupyter-python
-  sky = pysm.Sky(nside=nside, preset_strings=["d1"], output_unit=u.uK_CMB)
+  sky = pysm.Sky(nside=nside, preset_strings=["d0"], output_unit=u.uK_CMB)
   map_100GHz = sky.get_emission(100 * u.GHz)
-  plt.figure(figsize=(18, 4))
-  hp.mollview(survey.data * map_100GHz[0], min=0, max=100, title="I map", sub=(1, 3, 1))
-  hp.mollview(survey.data * map_100GHz[1], min=0, max=10, title="Q map", sub=(1, 3, 2))
-  hp.mollview(survey.data * map_100GHz[2], min=0, max=10, title="U map", sub=(1, 3, 3))
+  # plt.figure(figsize=(18, 4))
+  hp.mollview(survey.data * map_100GHz[0], min=-50, max=50, title="I map")
+  # hp.mollview(survey.data * map_100GHz[0], min=-50, max=50, title="I map", sub=(1, 3, 1))
+  # hp.mollview(survey.data * map_100GHz[1], min=0, max=1, title="Q map", sub=(1, 3, 2))
+  # hp.mollview(survey.data * map_100GHz[2], min=0, max=1, title="U map", sub=(1, 3, 3))
 #+END_SRC
 
 #+RESULTS:
-[[file:./.ob-jupyter/3bcc9db2f5206ca298c3ab9cc450fb427ce41776.png]]
+[[file:./.ob-jupyter/b8996076f4724a60ec459c4985c68ce917d4238b.png]]
 
 ** Create binning file and MCM computation
 We first create a binning file
@@ -503,6 +504,7 @@ Comptutation of matrix coupling mode and Bbl are done for different number of it
       fig, axes = plt.subplots(4, nfreq, sharex=True, sharey="row", figsize=(15, 12))
       if spec in ["TT", "EE", "BB"]:
           [ax.set_yscale("log") for ax in axes.flatten()]
+          [ax.set_xscale("log") for ax in axes.flatten()]
 
       def _plot_spectra(submodels, row_number):
           for i, (model, freq) in enumerate(product(submodels, frequencies)):
@@ -512,7 +514,7 @@ Comptutation of matrix coupling mode and Bbl are done for different number of it
       # Show CMB
       for ax in axes.flatten():
           ax.plot(ell_camb, dl_dict[spec.lower()], "gray", label="CMB")
-          ax.set_xlim(0, lmax)
+          ax.set_xlim(2, lmax)
 
       names = {"dust": dust, "synchrotron": synchrotron, "AME": ame, "free-free": free_free}
       for i, submodel in enumerate(names.values()):
@@ -533,11 +535,14 @@ Comptutation of matrix coupling mode and Bbl are done for different number of it
 #+END_SRC
 
 #+BEGIN_SRC jupyter-python
-  plot_spectra()
+  nside = 1024
+  plot_spectra(spec="TT",
+               models=pickle.load(open("./models_{}.pkl".format(nside), "rb")),
+               lmax=1000)
 #+END_SRC
 
 #+RESULTS:
-[[file:./.ob-jupyter/86df1d6a815af6cd386e03f620a69ad9b9089177.png]]
+[[file:./.ob-jupyter/bdca1cb9d1908ff190d3c3b8afbdd93e2d1f96b7.png]]
 
 #+BEGIN_SRC jupyter-python
   nside = 4096
@@ -545,7 +550,6 @@ Comptutation of matrix coupling mode and Bbl are done for different number of it
                models=pickle.load(open("./models_{}.pkl".format(nside), "rb")),
                lmax=3*nside-1)
 #+END_SRC
-
 
 #+RESULTS:
 [[file:./.ob-jupyter/a45d85d27643f0af7092f62e3aaa14e58cf65855.png]]
@@ -570,3 +574,264 @@ Comptutation of matrix coupling mode and Bbl are done for different number of it
 
 #+RESULTS:
 [[file:./.ob-jupyter/2c12b0f8e58a73d49fa82cc9abb0e24ef05671e6.png]]
+
+* Comparing galactic emission models from "real" simulations
+
+Here we use "real" simulations from
+https://github.com/simonsobs/map_based_simulations/tree/master/201904_highres_foregrounds_equatorial. By
+"real", we mean improved simulations with larger =nside= value for instance as input of =pysm=. The
+computation of power spectra is done @ Lyon with the following script
+
+#+BEGIN_SRC jupyter-python
+  import os
+  import pickle
+  import healpy as hp
+  import matplotlib.pyplot as plt
+  import numpy as np
+  import pspy
+  import pysm
+  import pysm.units as u
+  print(" healpy :", hp.__version__)
+  print("  numpy :", np.__version__)
+  print("   pysm :", pysm.__version__)
+  print("   pspy :", pspy.__version__)
+
+  from pspy import so_map, so_window, pspy_utils
+
+  nside = 4096
+  lmax = 5000
+  frequencies = [27, 39, 93, 145, 225, 280]  #GHz
+
+  print("Loading masks for nside =", nside)
+  galactic_mask = hp.read_map("./masks/mask_equatorial_{}.fits".format(nside),
+                              dtype=np.int,
+                              verbose=False)
+  survey_mask = hp.read_map("./masks/survey_mask_{}.fits".format(nside),
+                            dtype=np.int,
+                            verbose=False)
+  mask = galactic_mask * survey_mask
+  survey = so_map.healpix_template(ncomp=1, nside=nside)
+  survey.data = mask
+  survey = so_window.create_apodization(survey,
+                                        apo_type="C1",
+                                        apo_radius_degree=5)
+
+  print("Generating beams")
+  beam_fwhm = {27: 7.4, 39: 5.1, 93: 2.2, 145: 1.4, 225: 1.0, 280: 0.9}
+  bl = {
+      freq: pspy_utils.beam_from_fwhm(fwhm, lmax)[1]
+      for freq, fwhm in beam_fwhm.items()
+  }
+
+  print("Generating binning file")
+  output_dir = "/tmp/pysm"
+  os.makedirs(output_dir, exist_ok=True)
+  binning_file = os.path.join(output_dir, "binning.dat")
+  pspy_utils.create_binning_file(bin_size=40,
+                                 n_bins=1000,
+                                 file_name=binning_file)
+
+  print("Computing MCMs")
+  window = (survey, survey)
+  niter = 3
+  mcm_bbl_file = "./mcm_bbl.pkl"
+  mcm_bbl = pickle.load(open(mcm_bbl_file,
+                             "rb")) if os.path.exists(mcm_bbl_file) else {}
+
+  from itertools import combinations_with_replacement as cwr
+  for cross in cwr(frequencies, 2):
+      if cross in mcm_bbl: continue
+      print("Computing {}x{} GHz".format(*cross))
+      from pspy import so_mcm
+      f1, f2 = cross
+      mbb_inv, bbl = so_mcm.mcm_and_bbl_spin0and2(win1=window,
+                                                  win2=window,
+                                                  bl1=(bl[f1], bl[f1]),
+                                                  bl2=(bl[f2], bl[f2]),
+                                                  binning_file=binning_file,
+                                                  lmax=lmax,
+                                                  type="Dl",
+                                                  niter=niter)
+
+      mcm_bbl[cross] = {"mbb_inv": mbb_inv, "bbl": bbl}
+      pickle.dump(mcm_bbl, open(mcm_bbl_file, "wb"))
+
+  fgs = ["dust", "synchrotron", "ame", "freefree"]
+  sim_dir = os.path.join("201904_highres_foregrounds_equatorial", str(nside))
+
+  models_file = "./pysm_models_{}.pkl".format(nside)
+  models = pickle.load(
+      open(models_file,
+           "rb")) if os.path.exists(models_file) else {fg: {}
+                                                       for fg in fgs}
+
+  from itertools import product
+  for fg, cross in product(fgs, cwr(frequencies, 2)):
+      if cross in models[fg]: continue
+      print("Computing {} model @ {}x{} GHz".format(fg, *cross))
+
+      # Get emission map
+      tmpl = "simonsobs_{}_uKCMB_la{:03d}_nside4096_0000.fits"
+      map1 = so_map.read_map(
+          os.path.join(sim_dir, fg, "0000", tmpl.format(fg, cross[0])))
+      map2 = so_map.read_map(
+          os.path.join(sim_dir, fg, "0000", tmpl.format(fg, cross[1])))
+
+      def _check_iqu(somap):
+          if somap.ncomp == 3: return
+          iqu = np.zeros((3, len(somap.data)))
+          iqu[0] = somap.data
+          somap.ncomp = 3
+          somap.data = iqu
+
+      _check_iqu(map1)
+      _check_iqu(map2)
+
+      # Compute alm
+      from pspy import sph_tools
+      alms1 = sph_tools.get_alms(map1, window, niter=niter, lmax=lmax)
+      alms2 = sph_tools.get_alms(map2, window, niter=niter, lmax=lmax)
+
+      # Compute spectra
+      from pspy import so_spectra
+      spectra = ["TT", "TE", "TB", "ET", "BT", "EE", "EB", "BE", "BB"]
+      db = so_spectra.bin_spectra(*so_spectra.get_spectra(alms1,
+                                                          alms2,
+                                                          spectra=spectra),
+                                  binning_file=binning_file,
+                                  lmax=lmax,
+                                  type="Dl",
+                                  mbb_inv=mcm_bbl[cross]["mbb_inv"],
+                                  spectra=spectra)
+      models[fg][cross] = {"spectra": db}
+      pickle.dump(models, open(models_file, "wb"))
+#+END_SRC
+
+** Plotting spectra
+#+BEGIN_SRC jupyter-python
+  import pickle
+  # models = pickle.load(open("./pysm_models_fsky0p43.pkl", "rb"))
+  models = pickle.load(open("./pysm_models_4096.pkl", "rb"))
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC jupyter-python
+  spec = "TT"
+  frequency = 93
+  plt.figure(figsize=(8, 5))
+
+  # Show CMB first
+  plt.plot(ell_camb, dl_dict[spec.lower()], "gray", label="CMB theory")
+  cmb = models["cmb"][frequency, frequency]["spectra"]
+  plt.plot(cmb[0], cmb[1][spec], ".k", label="CMB simulated")
+  plt.xlim(20, 5200)
+
+  for fg in ["dust", "synchrotron", "ame", "freefree"]:
+    spectra = models[fg][frequency, frequency]["spectra"]
+    ell, Dell = spectra[0], spectra[1][spec]
+    plt.loglog(ell, Dell, label=fg)
+
+  plt.xlabel("$\ell$")
+  plt.ylabel("$D_\ell$")
+  plt.legend(bbox_to_anchor=(1, 1), loc="upper left", title="{0} - {1}x{1} GHz".format(spec, frequency));
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/12e2110be158cfbdaa8d375283ade4e5c8639c59.png]]
+
+
+*** Plotting frequencies spectra
+#+BEGIN_SRC jupyter-python
+  fg = "synchrotron"
+  spec = "TT"
+
+  def dust_model(ell, n, ell0):
+    return (ell/ell0)**n
+
+  plt.figure(figsize=(12, 8))
+
+  # Show CMB first
+  plt.plot(ell_camb, dl_dict[spec.lower()], "gray", label="CMB")
+  plt.xlim(20, 5200)
+
+  frequencies = [27, 39, 93, 145, 225, 280]  #GHz
+  frequencies = [27, 39, 93, 145, 225, 280]  #GHz
+  from itertools import combinations_with_replacement as cwr
+  for i, cross in enumerate(cwr(frequencies, 2)):
+    spectra = models[fg][cross]["spectra"]
+    ell, Dell = spectra[0], spectra[1][spec]
+    plt.loglog(ell, Dell, ".C{}".format(i%10), label="{}x{} GHz".format(*cross))
+    spectra = models1[fg][cross]["spectra"]
+    ell, Dell = spectra[0], spectra[1][spec]
+    plt.loglog(ell, Dell, "-C{}".format(i%10))
+
+    bounds = [[-np.inf, 0], [np.inf, np.inf]]
+    from scipy.optimize import curve_fit
+    popt, pcov = curve_fit(dust_model, ell, Dell, bounds=bounds)
+    ell = np.linspace(2, 5200)
+    # if cross != (27, 27):
+    #   plt.loglog(ell, dust_model(ell, *popt), "-C{}".format(i%10))
+    # print(cross, popt)
+
+  plt.xlabel("$\ell$")
+  plt.ylabel("$D_\ell$")
+  plt.legend(bbox_to_anchor=(1, 1), loc="upper left", title="{} - {}".format(spec, fg));
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/d3d82a300fc85c3e367d8b2bc2d0354a9eaffc5f.png]]
+
+
+#+BEGIN_SRC jupyter-python
+
+  spectra = dust[(280, 280)]["spectra"]
+  ell, Dell = spectra[0], spectra[1][spec]
+
+  bounds = [[-np.inf, 0], [np.inf, np.inf]]
+  from scipy.optimize import curve_fit
+  popt, pcov = curve_fit(dust_model, ell, Dell, bounds=bounds)
+  print(cross, popt)
+#+END_SRC
+
+#+RESULTS:
+: (280, 280) [2.35053103e-01 6.09022998e-09]
+
+* Studying mask
+
+#+BEGIN_SRC jupyter-python
+  masks = [
+      "mask_equatorial_pol_thr1p0_fsky0p28_ns4096.fits",
+      "mask_equatorial_pol_thr2p0_fsky0p50_ns4096.fits",
+      "mask_equatorial_pol_thr3p0_fsky0p62_ns4096.fits",
+      "mask_equatorial_pol_thr3p5_fsky0p67_ns4096.fits",
+      "mask_equatorial_pol_thr4p0_fsky0p71_ns4096.fits",
+      "mask_equatorial_pol_thr4p5_fsky0p75_ns4096.fits"
+  ]
+
+  import pickle
+  models = pickle.load(open("./pysm_models_masks.pkl", "rb"))
+  fg = "dust"#, "synchrotron", "ame", "freefree"]
+  spec = "EE"
+  cross = (280, 280)
+
+  fig, ax = plt.subplots(1, 1, figsize=(12, 6))
+  # Show CMB first
+  ax.plot(ell_camb, dl_dict[spec.lower()], "gray", label="CMB")
+  ax.set_xlim(20, 5200)
+  ax.set_ylim(10**-1, 10**2)
+  ax.set_xlabel("$\ell$")
+  ax.set_ylabel("$D_\ell$")
+
+  for mask in masks:
+      spectra = models[mask][fg][cross]
+      ell, Dell = spectra[0], spectra[1][spec]
+      ax.loglog(ell, Dell, label="{}".format(mask))
+
+  ax.legend(bbox_to_anchor=(1, 1), loc="upper left",
+            title="{} - {}x{} GHz - {}".format(spec, *cross, fg));
+  plt.tight_layout()
+#+END_SRC
+
+#+RESULTS:
+[[file:./.ob-jupyter/6096d1ca86d98832a66ae15450196cd270e13196.png]]
